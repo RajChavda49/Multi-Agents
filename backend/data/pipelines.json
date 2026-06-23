@@ -1,0 +1,387 @@
+{
+  "pipelines": [
+    {
+      "id": "554d1786-742f-4d38-9249-cd2d05d83043",
+      "pipeline_id": "554d1786-742f-4d38-9249-cd2d05d83043",
+      "jira_task": {
+        "key": "KAN-4",
+        "summary": "Change the footer text",
+        "description": "Testing perpose, change the title of project “AgentOps”.",
+        "issue_type": "Task",
+        "priority": "Medium",
+        "status": "To Do",
+        "assignee": "testh",
+        "url": "https://rajcodes49.atlassian.net/browse/KAN-4"
+      },
+      "phase": "planning",
+      "status": "gate_1_rejected",
+      "current_agent": "GATE_1",
+      "knowledge_context": {
+        "summary": "Knowledge context for KAN-4",
+        "relevant_modules": [
+          "src/components",
+          "src/api",
+          "src/hooks"
+        ],
+        "constraints": [
+          "Use existing design system tokens",
+          "Maintain backward-compatible API contracts"
+        ],
+        "dependencies": [
+          "auth middleware",
+          "shared UI primitives"
+        ],
+        "risks": [
+          "Cross-browser layout edge cases",
+          "API rate limits on bulk operations"
+        ],
+        "documentation_refs": [
+          "README.md",
+          "docs/architecture.md"
+        ],
+        "codebase_notes": "Feature should extend existing patterns; no new state management library."
+      },
+      "technical_spec": {
+        "title": "Change the footer text",
+        "overview": "Implement Change the footer text using existing React/Next.js patterns.",
+        "acceptance_criteria": [
+          "User can complete the primary workflow end-to-end",
+          "UI matches design system and is responsive",
+          "API endpoints return correct status codes and payloads"
+        ],
+        "frontend_tasks": [
+          "Add route/page component",
+          "Wire form state and validation",
+          "Connect to API layer with loading/error states"
+        ],
+        "backend_tasks": [
+          "Add REST endpoint(s) with input validation",
+          "Persist data with existing ORM patterns",
+          "Add unit tests for service layer"
+        ],
+        "data_model": {
+          "entities": [
+            "FeatureRecord"
+          ],
+          "fields": [
+            "id",
+            "title",
+            "status",
+            "createdAt"
+          ]
+        },
+        "api_contracts": [
+          {
+            "method": "GET",
+            "path": "/api/feature",
+            "description": "List records"
+          },
+          {
+            "method": "POST",
+            "path": "/api/feature",
+            "description": "Create record"
+          }
+        ],
+        "rollout_notes": "Ship behind feature flag; enable in staging first."
+      },
+      "test_cases": [
+        {
+          "id": "TC-001",
+          "title": "Happy path — create record",
+          "type": "e2e",
+          "priority": "P0",
+          "preconditions": [
+            "User is authenticated",
+            "Staging env is up"
+          ],
+          "steps": [
+            "Navigate to feature page",
+            "Fill required fields",
+            "Submit form"
+          ],
+          "expected": "Record appears in list with success toast"
+        },
+        {
+          "id": "TC-002",
+          "title": "Validation — required fields",
+          "type": "e2e",
+          "priority": "P1",
+          "preconditions": [
+            "User is on feature page"
+          ],
+          "steps": [
+            "Leave required field empty",
+            "Click submit"
+          ],
+          "expected": "Inline validation errors shown; no API call fired"
+        },
+        {
+          "id": "TC-003",
+          "title": "API — GET returns 200",
+          "type": "api",
+          "priority": "P0",
+          "preconditions": [
+            "Seed data exists"
+          ],
+          "steps": [
+            "GET /api/feature"
+          ],
+          "expected": "200 with paginated JSON body"
+        },
+        {
+          "id": "TC-004",
+          "title": "Responsive layout",
+          "type": "visual",
+          "priority": "P2",
+          "preconditions": [
+            "Page loaded at 375px viewport"
+          ],
+          "steps": [
+            "Capture screenshot",
+            "Compare to baseline"
+          ],
+          "expected": "No layout overflow or clipped controls"
+        }
+      ],
+      "test_suite_name": "Change the footer text — Phase 1 Test Plan",
+      "gate_1_approved": false,
+      "gate_1_feedback": "Rejected from dashboard",
+      "error": null,
+      "agent_logs": [
+        {
+          "agent": "A1",
+          "name": "Knowledge Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:17:47.685Z",
+          "completed_at": "2026-06-23T12:17:47.685Z",
+          "output_summary": "Knowledge context for KAN-4"
+        },
+        {
+          "agent": "A2",
+          "name": "Dev Plan Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:17:47.687Z",
+          "completed_at": "2026-06-23T12:17:47.688Z",
+          "output_summary": "Implement Change the footer text using existing React/Next.js patterns."
+        },
+        {
+          "agent": "A3",
+          "name": "Test Case Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:17:47.689Z",
+          "completed_at": "2026-06-23T12:17:47.689Z",
+          "output_summary": "4 test cases generated"
+        },
+        {
+          "agent": "A1",
+          "name": "Knowledge Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:17:47.685Z",
+          "completed_at": "2026-06-23T12:17:47.685Z",
+          "output_summary": "Knowledge context for KAN-4"
+        },
+        {
+          "agent": "A2",
+          "name": "Dev Plan Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:17:47.687Z",
+          "completed_at": "2026-06-23T12:17:47.688Z",
+          "output_summary": "Implement Change the footer text using existing React/Next.js patterns."
+        },
+        {
+          "agent": "A3",
+          "name": "Test Case Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:17:47.689Z",
+          "completed_at": "2026-06-23T12:17:47.689Z",
+          "output_summary": "4 test cases generated"
+        },
+        {
+          "agent": "GATE_1",
+          "name": "Human Gate 1",
+          "status": "rejected",
+          "completed_at": "2026-06-23T12:20:56.450Z",
+          "output_summary": "Rejected: Rejected from dashboard"
+        }
+      ],
+      "created_at": "2026-06-23T12:17:47.669Z",
+      "updated_at": "2026-06-23T12:20:56.453Z"
+    },
+    {
+      "id": "d4ebea3a-5025-46dd-a525-dd49297a3ba9",
+      "pipeline_id": "d4ebea3a-5025-46dd-a525-dd49297a3ba9",
+      "jira_task": {
+        "key": "KAN-5",
+        "summary": "Content Update: Refine Header Titles for Improved User Clarity",
+        "description": "Goal: Update specific page titles to better align with user expectations and improve accessibility/SEO.\nAcceptance Criteria:\n[ ] Update <h1> tags on the [Dashboard/Landing Page/Settings] page.\n[ ] Ensure the new titles are concise (under 60 characters) while remaining descriptive.\n[ ] Verify that the updated titles are reflected in the browser tab (document.title).\n[ ] Conduct a quick accessibility check to ensure the new H1 hierarchy remains semantic and valid.\nTechnical Notes:\nLocate the title variables in the constants/ui-content.js file.\nEnsure the changes are applied across all localized versions if applicable.\nCheck that the updated titles do not break any existing responsive styles or text overflows.",
+        "issue_type": "Task",
+        "priority": "Medium",
+        "status": "To Do",
+        "assignee": "Raj Chavda",
+        "url": "https://rajcodes49.atlassian.net/browse/KAN-5"
+      },
+      "phase": "planning",
+      "status": "awaiting_gate_1",
+      "current_agent": "GATE_1",
+      "knowledge_context": {
+        "summary": "Knowledge context for KAN-5",
+        "relevant_modules": [
+          "src/components",
+          "src/api",
+          "src/hooks"
+        ],
+        "constraints": [
+          "Use existing design system tokens",
+          "Maintain backward-compatible API contracts"
+        ],
+        "dependencies": [
+          "auth middleware",
+          "shared UI primitives"
+        ],
+        "risks": [
+          "Cross-browser layout edge cases",
+          "API rate limits on bulk operations"
+        ],
+        "documentation_refs": [
+          "README.md",
+          "docs/architecture.md"
+        ],
+        "codebase_notes": "Feature should extend existing patterns; no new state management library."
+      },
+      "technical_spec": {
+        "title": "Content Update: Refine Header Titles for Improved User Clarity",
+        "overview": "Implement Content Update: Refine Header Titles for Improved User Clarity using existing React/Next.js patterns.",
+        "acceptance_criteria": [
+          "User can complete the primary workflow end-to-end",
+          "UI matches design system and is responsive",
+          "API endpoints return correct status codes and payloads"
+        ],
+        "frontend_tasks": [
+          "Add route/page component",
+          "Wire form state and validation",
+          "Connect to API layer with loading/error states"
+        ],
+        "backend_tasks": [
+          "Add REST endpoint(s) with input validation",
+          "Persist data with existing ORM patterns",
+          "Add unit tests for service layer"
+        ],
+        "data_model": {
+          "entities": [
+            "FeatureRecord"
+          ],
+          "fields": [
+            "id",
+            "title",
+            "status",
+            "createdAt"
+          ]
+        },
+        "api_contracts": [
+          {
+            "method": "GET",
+            "path": "/api/feature",
+            "description": "List records"
+          },
+          {
+            "method": "POST",
+            "path": "/api/feature",
+            "description": "Create record"
+          }
+        ],
+        "rollout_notes": "Ship behind feature flag; enable in staging first."
+      },
+      "test_cases": [
+        {
+          "id": "TC-001",
+          "title": "Happy path — create record",
+          "type": "e2e",
+          "priority": "P0",
+          "preconditions": [
+            "User is authenticated",
+            "Staging env is up"
+          ],
+          "steps": [
+            "Navigate to feature page",
+            "Fill required fields",
+            "Submit form"
+          ],
+          "expected": "Record appears in list with success toast"
+        },
+        {
+          "id": "TC-002",
+          "title": "Validation — required fields",
+          "type": "e2e",
+          "priority": "P1",
+          "preconditions": [
+            "User is on feature page"
+          ],
+          "steps": [
+            "Leave required field empty",
+            "Click submit"
+          ],
+          "expected": "Inline validation errors shown; no API call fired"
+        },
+        {
+          "id": "TC-003",
+          "title": "API — GET returns 200",
+          "type": "api",
+          "priority": "P0",
+          "preconditions": [
+            "Seed data exists"
+          ],
+          "steps": [
+            "GET /api/feature"
+          ],
+          "expected": "200 with paginated JSON body"
+        },
+        {
+          "id": "TC-004",
+          "title": "Responsive layout",
+          "type": "visual",
+          "priority": "P2",
+          "preconditions": [
+            "Page loaded at 375px viewport"
+          ],
+          "steps": [
+            "Capture screenshot",
+            "Compare to baseline"
+          ],
+          "expected": "No layout overflow or clipped controls"
+        }
+      ],
+      "test_suite_name": "Content Update: Refine Header Titles for Improved User Clarity — Phase 1 Test Plan",
+      "gate_1_approved": null,
+      "gate_1_feedback": null,
+      "error": null,
+      "agent_logs": [
+        {
+          "agent": "A1",
+          "name": "Knowledge Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:21:14.630Z",
+          "completed_at": "2026-06-23T12:21:14.630Z",
+          "output_summary": "Knowledge context for KAN-5"
+        },
+        {
+          "agent": "A2",
+          "name": "Dev Plan Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:21:14.631Z",
+          "completed_at": "2026-06-23T12:21:14.631Z",
+          "output_summary": "Implement Content Update: Refine Header Titles for Improved User Clarity using existing React/Next.js patterns."
+        },
+        {
+          "agent": "A3",
+          "name": "Test Case Agent",
+          "status": "completed",
+          "started_at": "2026-06-23T12:21:14.633Z",
+          "completed_at": "2026-06-23T12:21:14.633Z",
+          "output_summary": "4 test cases generated"
+        }
+      ],
+      "created_at": "2026-06-23T12:21:14.627Z",
+      "updated_at": "2026-06-23T12:21:14.635Z"
+    }
+  ]
+}
