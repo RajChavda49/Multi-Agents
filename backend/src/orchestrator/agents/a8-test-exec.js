@@ -1,36 +1,34 @@
 import { chatJson } from "../llm.js";
 
-const SYSTEM = `You are A8 Testing Exec Agent. Summarize Playwright test execution results.
-Respond ONLY with valid JSON with keys: passed, failed, skipped, total, duration_ms, results (array).`;
+const SYSTEM = `You are A8 Testing Exec Agent. Analyze the generated test files and test plan.
+Note: tests are NOT executed automatically — produce a structured readiness report and what would be run.
+Respond ONLY with valid JSON:
+{
+  "passed": number,
+  "failed": number,
+  "skipped": number,
+  "total": number,
+  "duration_ms": number,
+  "environment": "string",
+  "test_files": ["paths"],
+  "results": [{ "id": "TC-001", "title": "string", "status": "pending|passed|failed", "duration_ms": number, "note": "string" }],
+  "execution_note": "string explaining tests were not auto-run unless noted otherwise"
+}`;
 
 export async function runA8TestExec(state) {
   const startedAt = new Date().toISOString();
   const testFiles = state.test_code?.files || [];
   const plannedCases = state.test_cases || [];
 
-  const mockResults = plannedCases.slice(0, 4).map((tc, i) => ({
-    id: tc.id,
-    title: tc.title,
-    status: i === 0 ? "passed" : "passed",
-    duration_ms: 800 + i * 200,
-  }));
+  const user = `Test plan cases:
+${JSON.stringify(plannedCases, null, 2)}
 
-  const mockPayload = {
-    passed: mockResults.length,
-    failed: 0,
-    skipped: Math.max(0, plannedCases.length - mockResults.length),
-    total: plannedCases.length,
-    duration_ms: mockResults.reduce((s, r) => s + r.duration_ms, 0),
-    environment: "local-docker",
-    test_files: testFiles.map((f) => f.path),
-    results: mockResults,
-  };
+Generated test files:
+${JSON.stringify(testFiles, null, 2)}
 
-  const user = `Execute tests for:
-Test files: ${JSON.stringify(testFiles.map((f) => f.path))}
-Planned cases: ${JSON.stringify(plannedCases)}`;
+Report readiness and map each planned case to generated coverage. Mark status "pending" unless real execution data is provided.`;
 
-  const execution = await chatJson(SYSTEM, user, mockPayload);
+  const execution = await chatJson(SYSTEM, user, { agent: "A8", pipeline_id: state.pipeline_id });
 
   return {
     test_execution: execution,
@@ -42,7 +40,7 @@ Planned cases: ${JSON.stringify(plannedCases)}`;
         status: execution.failed === 0 ? "completed" : "failed",
         started_at: startedAt,
         completed_at: new Date().toISOString(),
-        output_summary: `${execution.passed}/${execution.total} tests passed`,
+        output_summary: execution.execution_note || `${execution.passed}/${execution.total} tests`,
       },
     ],
   };

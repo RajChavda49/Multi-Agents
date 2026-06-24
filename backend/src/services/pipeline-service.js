@@ -2,11 +2,13 @@ import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
 import {
   runPlanningPhase,
+  retryDevelopmentPhase,
   resumeGate1,
   resumeGate2,
   getGraphState,
   resolveStatus,
 } from "../orchestrator/graph.js";
+import { ensureOllamaReady } from "../orchestrator/llm.js";
 import { getPipeline, savePipeline, listPipelines, getActivePipelineByJiraKey, normalizeStatus, deletePipeline } from "../storage/pipelines.js";
 import {
   isJiraConfigured,
@@ -17,7 +19,28 @@ import {
 } from "../integrations/jira-client.js";
 import { isGitLabConfigured, syncGitLabRepository } from "../integrations/gitlab-client.js";
 import { publishPipelineChanges } from "../integrations/repo-target.js";
+import { revertPipelineRepoChanges } from "../integrations/repo-revert.js";
 import { removePipelineWorkspace } from "../orchestrator/workspace.js";
+import { buildFailureRecord, failureSummary } from "./pipeline-errors.js";
+import { reportAgentActivity } from "./pipeline-progress.js";
+import {
+  beginRun,
+  cancelRun,
+  endRun,
+  isPipelineCancelledError,
+} from "./pipeline-run-control.js";
+
+const activeRuns = new Set();
+
+function startPipelineRun(pipelineId) {
+  activeRuns.add(pipelineId);
+  beginRun(pipelineId);
+}
+
+function stopPipelineRun(pipelineId) {
+  endRun(pipelineId);
+  activeRuns.delete(pipelineId);
+}
 
 const CreatePipelineSchema = z.object({
   jira_key: z.string().min(1),
@@ -31,6 +54,11 @@ const CreatePipelineSchema = z.object({
 
 const GateDecisionSchema = z.object({
   feedback: z.string().optional(),
+});
+
+const RetrySchema = z.object({
+  reason: z.string().min(1, "Retry reason is required"),
+  phase: z.enum(["auto", "planning", "development"]).optional().default("auto"),
 });
 
 const TERMINAL_STATUSES = [
@@ -96,8 +124,9 @@ function mergeAgentLogs(existing, incoming) {
 }
 
 async function mergeGraphResult(pipelineId, existing, result) {
-  const graphState = (await getGraphState(pipelineId)) || {};
-  const rawStatus = await resolveStatus(pipelineId, { ...graphState, ...result });
+  const threadId = result.graph_thread_id || existing.graph_thread_id || pipelineId;
+  const graphState = (await getGraphState(threadId)) || {};
+  const rawStatus = await resolveStatus(threadId, { ...graphState, ...result });
   const status = normalizeStatus(rawStatus, graphState.phase || result.phase || existing.phase);
 
   const agent_logs =
@@ -130,6 +159,54 @@ function emptyPhase2Fields() {
   };
 }
 
+async function executePlanningPhase(pipelineId, base) {
+  if (activeRuns.has(pipelineId)) return;
+  startPipelineRun(pipelineId);
+
+  reportAgentActivity(pipelineId, {
+    status: "phase_1_running",
+    phase: "planning",
+    current_agent: "A1",
+  });
+
+  try {
+    await ensureOllamaReady();
+    const result = await runPlanningPhase({ ...base, pipeline_id: pipelineId });
+    if (!getPipeline(pipelineId)) return;
+    const merged = await mergeGraphResult(pipelineId, base, result);
+    savePipeline(merged);
+
+    if (isJiraConfigured() && base.jira_task?.key) {
+      try {
+        await addComment(
+          base.jira_task.key,
+          `SDLC Agents: Phase 1 planning complete. Status: ${merged.status}. Awaiting Gate 1 review.`,
+        );
+      } catch {
+        // non-blocking
+      }
+    }
+  } catch (err) {
+    if (isPipelineCancelledError(err)) {
+      console.log(`[pipeline] ${pipelineId} deleted — run stopped`);
+      return;
+    }
+    if (!getPipeline(pipelineId)) return;
+    const latest = getPipeline(pipelineId) || base;
+    const failure = buildFailureRecord(err, latest);
+    savePipeline({
+      ...latest,
+      status: "failed",
+      error: failureSummary(failure) || err.message,
+      failure,
+      current_agent: failure.agent || latest.current_agent,
+      updated_at: new Date().toISOString(),
+    });
+  } finally {
+    stopPipelineRun(pipelineId);
+  }
+}
+
 export async function createAndRunPipeline(input) {
   const resolved = await resolvePipelineInput(input);
   const id = uuidv4();
@@ -149,10 +226,11 @@ export async function createAndRunPipeline(input) {
   const initial = {
     id,
     pipeline_id: id,
+    graph_thread_id: id,
     jira_task: jiraTask,
     phase: "planning",
-    status: "pending",
-    current_agent: null,
+    status: "phase_1_running",
+    current_agent: "A1",
     knowledge_context: null,
     technical_spec: null,
     test_cases: [],
@@ -161,6 +239,7 @@ export async function createAndRunPipeline(input) {
     gate_1_feedback: null,
     ...emptyPhase2Fields(),
     error: null,
+    failure: null,
     agent_logs: [],
     created_at: now,
     updated_at: now,
@@ -176,33 +255,9 @@ export async function createAndRunPipeline(input) {
     }
   }
 
-  try {
-    const result = await runPlanningPhase({ ...initial, pipeline_id: id });
-    const merged = await mergeGraphResult(id, initial, result);
-    savePipeline(merged);
+  executePlanningPhase(id, initial);
 
-    if (isJiraConfigured()) {
-      try {
-        await addComment(
-          jiraTask.key,
-          `SDLC Agents: Phase 1 planning complete. Status: ${merged.status}. Awaiting Gate 1 review.`,
-        );
-      } catch {
-        // non-blocking
-      }
-    }
-
-    return merged;
-  } catch (err) {
-    const failed = {
-      ...initial,
-      status: "failed",
-      error: err.message,
-      updated_at: new Date().toISOString(),
-    };
-    savePipeline(failed);
-    throw err;
-  }
+  return getPipeline(id);
 }
 
 export async function createAndRunPipelineFromJiraKey(jiraKey) {
@@ -226,28 +281,44 @@ export async function approveGate1(pipelineId, feedback = null) {
     throw new Error(`Pipeline is not awaiting Gate 1 (status: ${existing.status})`);
   }
 
-  const result = await resumeGate1(pipelineId, { approved: true, feedback });
-  const merged = await mergeGraphResult(pipelineId, existing, result);
-  savePipeline(merged);
-
-  if (isJiraConfigured() && existing.jira_task?.key) {
-    try {
-      const phase2Note =
-        merged.status === "awaiting_gate_2"
-          ? " Phase 2 coding complete. Awaiting Gate 2 — review generated code & test scripts."
-          : merged.status === "phase_2_complete"
-            ? " Phase 2 complete (review, tests, report)."
-            : "";
-      await addComment(
-        existing.jira_task.key,
-        `SDLC Agents: Gate 1 APPROVED.${feedback ? ` Note: ${feedback}` : ""}${phase2Note}`,
-      );
-    } catch {
-      // non-blocking
+  startPipelineRun(pipelineId);
+  try {
+    const result = await resumeGate1(existing.graph_thread_id || pipelineId, { approved: true, feedback });
+    if (!getPipeline(pipelineId)) {
+      return { id: pipelineId, deleted: true };
     }
-  }
+    const merged = await mergeGraphResult(pipelineId, existing, result);
+    savePipeline(merged);
 
-  return merged;
+    if (isJiraConfigured() && existing.jira_task?.key) {
+      try {
+        const phase2Note =
+          merged.status === "awaiting_gate_2"
+            ? " A7 review, A8 test execution, and A9 report complete. Awaiting Gate 2 — review results before staging."
+            : merged.status === "phase_2_complete"
+              ? " Phase 2 complete — Gate 2 approved."
+              : merged.status === "phase_2_running"
+                ? " Phase 2 development in progress."
+                : "";
+        await addComment(
+          existing.jira_task.key,
+          `SDLC Agents: Gate 1 APPROVED.${feedback ? ` Note: ${feedback}` : ""}${phase2Note}`,
+        );
+      } catch {
+        // non-blocking
+      }
+    }
+
+    return merged;
+  } catch (err) {
+    if (isPipelineCancelledError(err)) {
+      console.log(`[pipeline] ${pipelineId} deleted — run stopped`);
+      return { id: pipelineId, deleted: true };
+    }
+    throw err;
+  } finally {
+    stopPipelineRun(pipelineId);
+  }
 }
 
 export async function rejectGate1(pipelineId, feedback = "Rejected by reviewer") {
@@ -259,7 +330,7 @@ export async function rejectGate1(pipelineId, feedback = "Rejected by reviewer")
     throw new Error(`Pipeline is not awaiting Gate 1 (status: ${existing.status})`);
   }
 
-  const result = await resumeGate1(pipelineId, { approved: false, feedback });
+  const result = await resumeGate1(existing.graph_thread_id || pipelineId, { approved: false, feedback });
   const merged = await mergeGraphResult(pipelineId, existing, {
     ...result,
     gate_1_feedback: feedback,
@@ -289,36 +360,50 @@ export async function approveGate2(pipelineId, feedback = null) {
     throw new Error(`Pipeline is not awaiting Gate 2 (status: ${existing.status})`);
   }
 
-  const result = await resumeGate2(pipelineId, { approved: true, feedback });
-  const merged = await mergeGraphResult(pipelineId, existing, result);
-
-  let git_publish = null;
-  if (merged.status === "phase_2_complete") {
-    try {
-      git_publish = await publishPipelineChanges(merged);
-      merged.git_publish = git_publish;
-    } catch (err) {
-      merged.git_publish = { error: err.message };
+  startPipelineRun(pipelineId);
+  try {
+    const result = await resumeGate2(existing.graph_thread_id || pipelineId, { approved: true, feedback });
+    if (!getPipeline(pipelineId)) {
+      return { id: pipelineId, deleted: true };
     }
-  }
+    const merged = await mergeGraphResult(pipelineId, existing, result);
 
-  savePipeline(merged);
-
-  if (isJiraConfigured() && existing.jira_task?.key) {
-    try {
-      const mrNote = merged.git_publish?.merge_request?.web_url
-        ? ` MR: ${merged.git_publish.merge_request.web_url}`
-        : "";
-      await addComment(
-        existing.jira_task.key,
-        `SDLC Agents: Gate 2 APPROVED — review & test execution complete.${feedback ? ` Note: ${feedback}` : ""}${mrNote}`,
-      );
-    } catch {
-      // non-blocking
+    let git_publish = null;
+    if (merged.status === "phase_2_complete") {
+      try {
+        git_publish = await publishPipelineChanges(merged);
+        merged.git_publish = git_publish;
+      } catch (err) {
+        merged.git_publish = { error: err.message };
+      }
     }
-  }
 
-  return merged;
+    savePipeline(merged);
+
+    if (isJiraConfigured() && existing.jira_task?.key) {
+      try {
+        const mrNote = merged.git_publish?.merge_request?.web_url
+          ? ` MR: ${merged.git_publish.merge_request.web_url}`
+          : "";
+        await addComment(
+          existing.jira_task.key,
+          `SDLC Agents: Gate 2 APPROVED — review & test execution complete.${feedback ? ` Note: ${feedback}` : ""}${mrNote}`,
+        );
+      } catch {
+        // non-blocking
+      }
+    }
+
+    return merged;
+  } catch (err) {
+    if (isPipelineCancelledError(err)) {
+      console.log(`[pipeline] ${pipelineId} deleted — run stopped`);
+      return { id: pipelineId, deleted: true };
+    }
+    throw err;
+  } finally {
+    stopPipelineRun(pipelineId);
+  }
 }
 
 export async function rejectGate2(pipelineId, feedback = "Rejected by reviewer") {
@@ -330,7 +415,7 @@ export async function rejectGate2(pipelineId, feedback = "Rejected by reviewer")
     throw new Error(`Pipeline is not awaiting Gate 2 (status: ${existing.status})`);
   }
 
-  const result = await resumeGate2(pipelineId, { approved: false, feedback });
+  const result = await resumeGate2(existing.graph_thread_id || pipelineId, { approved: false, feedback });
   const merged = await mergeGraphResult(pipelineId, existing, {
     ...result,
     gate_2_feedback: feedback,
@@ -385,16 +470,166 @@ export function getPipelineByJiraKey(jiraKey) {
   return null;
 }
 
+const RETRY_RUNNING_STATUSES = ["pending", "phase_1_running", "phase_2_running"];
+
+function resolveRetryPhase(pipeline, requested) {
+  const status = normalizeStatus(pipeline.status, pipeline.phase);
+  if (requested !== "auto") return requested;
+  if (
+    ["awaiting_gate_2", "gate_2_rejected", "phase_2_complete"].includes(status) &&
+    pipeline.gate_1_approved
+  ) {
+    return "development";
+  }
+  return "planning";
+}
+
+export async function retryPipeline(pipelineId, input) {
+  const { reason, phase: requestedPhase } = RetrySchema.parse(input);
+  const existing = getPipeline(pipelineId);
+  if (!existing) {
+    throw new Error(`Pipeline not found: ${pipelineId}`);
+  }
+
+  const status = normalizeStatus(existing.status, existing.phase);
+  if (RETRY_RUNNING_STATUSES.includes(status)) {
+    throw new Error(`Pipeline is still running (status: ${status})`);
+  }
+
+  const targetPhase = resolveRetryPhase(existing, requestedPhase);
+  if (targetPhase === "development" && !existing.technical_spec) {
+    throw new Error("Cannot retry development — planning outputs are missing");
+  }
+
+  removePipelineWorkspace(pipelineId);
+
+  const retry_count = (existing.retry_count || 0) + 1;
+  const graph_thread_id = `${existing.id}::r${retry_count}`;
+  const retryEntry = {
+    at: new Date().toISOString(),
+    reason,
+    phase: targetPhase,
+    from_status: status,
+  };
+  const retry_history = [...(existing.retry_history || []), retryEntry];
+
+  const inProgress = {
+    ...existing,
+    retry_feedback: reason,
+    retry_history,
+    retry_count,
+    graph_thread_id,
+    error: null,
+    git_publish: null,
+    status: targetPhase === "planning" ? "phase_1_running" : "phase_2_running",
+    updated_at: new Date().toISOString(),
+  };
+
+  if (targetPhase === "planning") {
+    Object.assign(inProgress, {
+      phase: "planning",
+      knowledge_context: null,
+      technical_spec: null,
+      test_cases: [],
+      test_suite_name: null,
+      gate_1_approved: null,
+      gate_1_feedback: null,
+      ...emptyPhase2Fields(),
+    });
+  } else {
+    Object.assign(inProgress, emptyPhase2Fields(), {
+      phase: "development",
+      gate_2_approved: null,
+      gate_2_feedback: null,
+    });
+  }
+
+  savePipeline(inProgress);
+
+  const runRetry = async () => {
+    if (activeRuns.has(existing.id)) return;
+    startPipelineRun(existing.id);
+    try {
+      await ensureOllamaReady();
+      const result =
+        targetPhase === "planning"
+          ? await runPlanningPhase({ ...inProgress, pipeline_id: existing.id })
+          : await retryDevelopmentPhase(inProgress);
+
+      if (!getPipeline(existing.id)) return;
+
+      const merged = await mergeGraphResult(existing.id, inProgress, {
+        ...result,
+        graph_thread_id,
+        retry_feedback: reason,
+        retry_history,
+        retry_count,
+      });
+      savePipeline(merged);
+
+      if (isJiraConfigured() && existing.jira_task?.key) {
+        try {
+          await addComment(
+            existing.jira_task.key,
+            `SDLC Agents: Pipeline RETRY (${targetPhase}). Reason: ${reason}`,
+          );
+        } catch {
+          // non-blocking
+        }
+      }
+    } catch (err) {
+      if (isPipelineCancelledError(err)) {
+        console.log(`[pipeline] ${existing.id} deleted — run stopped`);
+        return;
+      }
+      if (!getPipeline(existing.id)) return;
+      const failure = buildFailureRecord(err, inProgress);
+      savePipeline({
+        ...inProgress,
+        status: "failed",
+        error: failureSummary(failure) || err.message,
+        failure,
+        current_agent: failure.agent || inProgress.current_agent,
+      });
+    } finally {
+      stopPipelineRun(existing.id);
+    }
+  };
+
+  runRetry();
+
+  return getPipeline(existing.id);
+}
+
 export function removePipelineById(pipelineId) {
   const existing = getPipeline(pipelineId);
   if (!existing) {
     throw new Error(`Pipeline not found: ${pipelineId}`);
   }
 
+  cancelRun(pipelineId);
+  activeRuns.delete(pipelineId);
+
+  const repo_revert = revertPipelineRepoChanges(existing);
+
   deletePipeline(pipelineId);
   removePipelineWorkspace(pipelineId);
 
-  return { id: pipelineId, deleted: true, jira_key: existing.jira_task?.key };
+  const revertedCount =
+    (repo_revert.files?.restored?.length || 0) +
+    (repo_revert.files?.deleted?.length || 0) +
+    (repo_revert.files?.git_restored?.length || 0);
+
+  console.log(
+    `[pipeline] ${pipelineId} deleted — cancelled run, reverted ${revertedCount} repo file(s)`,
+  );
+
+  return {
+    id: pipelineId,
+    deleted: true,
+    jira_key: existing.jira_task?.key,
+    repo_revert,
+  };
 }
 
-export { CreatePipelineSchema, GateDecisionSchema };
+export { CreatePipelineSchema, GateDecisionSchema, RetrySchema };

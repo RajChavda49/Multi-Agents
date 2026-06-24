@@ -6,10 +6,10 @@ const AGENTS = [
   { id: "A4", name: "Frontend" },
   { id: "A5", name: "Backend" },
   { id: "A6", name: "Tests" },
-  { id: "GATE_2", name: "Gate 2" },
   { id: "A7", name: "Review" },
   { id: "A8", name: "Test Exec" },
   { id: "A9", name: "Report" },
+  { id: "GATE_2", name: "Gate 2" },
 ];
 
 function agentState(pipeline, agentId) {
@@ -22,6 +22,17 @@ function agentState(pipeline, agentId) {
   if (log?.status === "rejected" || log?.status === "failed") return "rejected";
   if (current === agentId || (agentId === "A4" && current === "A4-A6")) return "active";
   if (["A4", "A5", "A6"].includes(agentId) && current === "A4-A6") return "active";
+  if (
+    status === "phase_1_running" &&
+    agentId === "A1" &&
+    !log &&
+    (!current || current === "A1")
+  ) {
+    return "active";
+  }
+  if (status === "phase_2_running" && ["A7", "A8", "A9"].includes(agentId) && current === agentId) {
+    return "active";
+  }
   if (status === "awaiting_gate_1" && agentId === "GATE_1") return "waiting";
   if (status === "awaiting_gate_2" && agentId === "GATE_2") return "waiting";
 
@@ -41,7 +52,7 @@ function furthestAgentIndex(pipeline) {
     const idx = order.indexOf(log.agent);
     if (idx > max && (log.status === "completed" || log.status === "approved")) max = idx;
   }
-  if (pipeline.status === "phase_2_complete") return order.indexOf("A9");
+  if (pipeline.status === "phase_2_complete") return order.indexOf("GATE_2");
   if (pipeline.status === "awaiting_gate_2") return order.indexOf("GATE_2");
   if (pipeline.current_agent) {
     const idx = order.indexOf(pipeline.current_agent);

@@ -121,9 +121,9 @@ Jira Task → A1 Knowledge → A2 Dev Plan → A3 Test Cases → 🛑 Gate 1 (HI
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3001 | API port |
-| `MOCK_LLM` | true | Use mock agent outputs (set false + Ollama for real LLM) |
-| `OLLAMA_BASE_URL` | http://localhost:11434 | Ollama endpoint |
-| `OLLAMA_REASONING_MODEL` | llama3 | Model for A1–A3 |
+| `OLLAMA_BASE_URL` | http://localhost:11434 | Ollama endpoint (required — all agents use live LLM) |
+| `OLLAMA_REASONING_MODEL` | llama3 | Model for A1–A3, A7–A9 |
+| `OLLAMA_CODING_MODEL` | qwen2.5-coder | Model for A4–A6 |
 | `JIRA_BASE_URL` | — | Jira Cloud site URL (e.g. `https://acme.atlassian.net`) |
 | `JIRA_EMAIL` | — | Atlassian account email |
 | `JIRA_API_TOKEN` | — | API token from Atlassian account settings |

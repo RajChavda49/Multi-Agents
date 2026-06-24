@@ -1,51 +1,55 @@
-import { chatJson } from "../llm.js";
-import { getRepoPromptContext } from "../../integrations/local-repo.js";
+import { chatJsonPlanning } from "../llm.js";
+import { getRetryPromptContext } from "../retry-context.js";
+import { reportAgentActivity } from "../../services/pipeline-progress.js";
+import { formatJiraBlock, formatKnowledgeForA2 } from "../prompt-format.js";
 
-const SYSTEM = `You are A2 Dev Plan Agent. Generate a technical feature specification from
-knowledge context and the Jira task. Respond ONLY with valid JSON.`;
+const SYSTEM = `You are A2 Dev Plan Agent. Turn Jira + A1 analysis into a concrete implementation plan.
+
+Respond ONLY with valid JSON:
+{
+  "title": "string",
+  "overview": "string",
+  "change_scope": "short|medium|long",
+  "change_type": "ui_copy|ui_component|styling|api|data_model|full_feature|bugfix|other",
+  "backend_needed": false,
+  "acceptance_criteria": ["from Jira, refined"],
+  "frontend_tasks": ["specific file-level tasks"],
+  "backend_tasks": ["empty array if backend_needed is false"],
+  "data_model": { "entities": [], "fields": [] },
+  "api_contracts": [],
+  "rollout_notes": "how to verify"
+}
+
+Rules:
+- Honor A1 change_scope and backend_needed unless Jira clearly contradicts
+- For change_scope "short": frontend_tasks must name exact files and the exact string/UI change
+- backend_tasks must be [] when backend_needed is false
+- Do not invent API work for UI-only copy changes`;
 
 export async function runA2DevPlan(state) {
   const task = state.jira_task;
   const knowledge = state.knowledge_context;
   const startedAt = new Date().toISOString();
+  reportAgentActivity(state.pipeline_id, { current_agent: "A2" });
 
-  const mockPayload = {
-    title: task.summary,
-    overview: `Implement ${task.summary} using existing React/Next.js patterns.`,
-    acceptance_criteria: [
-      "User can complete the primary workflow end-to-end",
-      "UI matches design system and is responsive",
-      "API endpoints return correct status codes and payloads",
-    ],
-    frontend_tasks: [
-      "Add route/page component",
-      "Wire form state and validation",
-      "Connect to API layer with loading/error states",
-    ],
-    backend_tasks: [
-      "Add REST endpoint(s) with input validation",
-      "Persist data with existing ORM patterns",
-      "Add unit tests for service layer",
-    ],
-    data_model: {
-      entities: ["FeatureRecord"],
-      fields: ["id", "title", "status", "createdAt"],
-    },
-    api_contracts: [
-      { method: "GET", path: "/api/feature", description: "List records" },
-      { method: "POST", path: "/api/feature", description: "Create record" },
-    ],
-    rollout_notes: "Ship behind feature flag; enable in staging first.",
-  };
+  const user = `${getRetryPromptContext(state)}${formatJiraBlock(task)}
 
-  const user = `Jira: ${task.key} — ${task.summary}
+=== A1 ANALYSIS ===
+${JSON.stringify(formatKnowledgeForA2(knowledge), null, 2)}
 
-${getRepoPromptContext(knowledge)}
+Write the dev plan. Be specific about which files to edit.`;
 
-Knowledge context:
-${JSON.stringify(knowledge, null, 2)}`;
+  const spec = await chatJsonPlanning(SYSTEM, user, {
+    agent: "A2",
+    pipeline_id: state.pipeline_id,
+    num_predict: 800,
+    num_ctx: 4096,
+  });
 
-  const spec = await chatJson(SYSTEM, user, mockPayload);
+  if (!spec.backend_needed) {
+    spec.backend_tasks = [];
+    spec.api_contracts = spec.api_contracts || [];
+  }
 
   return {
     technical_spec: spec,
@@ -57,7 +61,7 @@ ${JSON.stringify(knowledge, null, 2)}`;
         status: "completed",
         started_at: startedAt,
         completed_at: new Date().toISOString(),
-        output_summary: spec.overview,
+        output_summary: `${spec.change_scope || "?"} · backend ${spec.backend_needed ? "yes" : "no"} — ${(spec.overview || spec.title || "").slice(0, 80)}`,
       },
     ],
   };

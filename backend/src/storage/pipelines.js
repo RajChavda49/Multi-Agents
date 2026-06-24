@@ -63,6 +63,9 @@ export function deletePipeline(id) {
 }
 
 export function normalizeStatus(status, phase) {
+  if (status === "pending") {
+    return phase === "development" ? "phase_2_running" : "phase_1_running";
+  }
   if (status === "gate_1_approved" || status === "developing") return "phase_2_running";
   if (status === "running") return phase === "development" ? "phase_2_running" : "phase_1_running";
   return status;
@@ -92,5 +95,7 @@ export function toSummary(pipeline) {
     gate_2_approved: pipeline.gate_2_approved,
     created_at: pipeline.created_at,
     updated_at: pipeline.updated_at,
+    error: pipeline.error || null,
+    failed_agent: pipeline.failure?.agent || null,
   };
 }

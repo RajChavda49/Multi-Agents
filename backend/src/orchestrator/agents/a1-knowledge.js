@@ -1,42 +1,57 @@
-import { chatJson } from "../llm.js";
+import { chatJsonPlanning } from "../llm.js";
 import { gatherKnowledgeContext } from "../../integrations/local-repo.js";
+import { getRetryPromptContext } from "../retry-context.js";
+import { reportAgentActivity } from "../../services/pipeline-progress.js";
+import { formatJiraBlock, formatRepoScanForLlm } from "../prompt-format.js";
 
-const SYSTEM = `You are A1 Knowledge Agent. Analyze the Jira task and local codebase context to produce
-structured planning context: relevant modules, constraints, dependencies, and risks.
-Respond ONLY with valid JSON matching the schema.`;
+const SYSTEM = `You are A1 Knowledge Agent for an SDLC pipeline.
+
+Read the Jira task and repo scan. Classify the work and identify where changes belong.
+
+Respond ONLY with valid JSON:
+{
+  "summary": "one paragraph: what to do and where",
+  "change_scope": "short|medium|long",
+  "change_type": "ui_copy|ui_component|styling|api|data_model|full_feature|bugfix|other",
+  "backend_needed": false,
+  "backend_reason": "why backend is or is not needed",
+  "relevant_modules": ["folder paths"],
+  "constraints": ["implementation constraints"],
+  "dependencies": ["libs or systems touched"],
+  "risks": ["risks"],
+  "documentation_refs": ["file paths if any"],
+  "codebase_notes": "actionable notes for developers"
+}
+
+Rules for classification:
+- change_scope "short": text/copy swap, single file, config tweak, < ~30 lines
+- change_scope "medium": few files, one component flow
+- change_scope "long": new feature, many files, API + UI
+- backend_needed: true only if task requires API routes, server logic, DB, or auth — not for pure UI/footer text changes`;
 
 export async function runA1Knowledge(state) {
   const task = state.jira_task;
   const startedAt = new Date().toISOString();
+  reportAgentActivity(state.pipeline_id, {
+    status: "phase_1_running",
+    phase: "planning",
+    current_agent: "A1",
+  });
 
-  const repoContext = gatherKnowledgeContext(task);
+  const repoContext = gatherKnowledgeContext(task, state.retry_feedback);
 
-  const mockPayload = repoContext.repo_connected
-    ? repoContext
-    : {
-        summary: `Knowledge context for ${task.key}`,
-        repo_connected: false,
-        relevant_modules: ["src/components", "src/api", "src/hooks"],
-        constraints: ["Set TARGET_REPO_PATH in .env to connect a local codebase"],
-        dependencies: [],
-        risks: [],
-        documentation_refs: [],
-        codebase_notes: "No local repo connected",
-      };
+  const user = `${getRetryPromptContext(state)}${formatJiraBlock(task)}
 
-  const user = `Jira Task:
-Key: ${task.key}
-Summary: ${task.summary}
-Description: ${task.description || "(none)"}
-Type: ${task.issue_type || "Task"}
-Priority: ${task.priority || "Medium"}
+${formatRepoScanForLlm(repoContext)}
 
-Use the local codebase scan below. If repo_connected is true, base relevant_modules and risks on real paths.
+Analyze the task. Prefer content-matched files as edit targets.`;
 
-Local codebase scan:
-${JSON.stringify(repoContext, null, 2)}`;
-
-  const knowledge = await chatJson(SYSTEM, user, mockPayload);
+  const knowledge = await chatJsonPlanning(SYSTEM, user, {
+    agent: "A1",
+    pipeline_id: state.pipeline_id,
+    num_predict: 640,
+    num_ctx: 4096,
+  });
 
   return {
     knowledge_context: { ...repoContext, ...knowledge, repo_connected: repoContext.repo_connected },
@@ -48,7 +63,7 @@ ${JSON.stringify(repoContext, null, 2)}`;
         status: "completed",
         started_at: startedAt,
         completed_at: new Date().toISOString(),
-        output_summary: knowledge.summary,
+        output_summary: `${knowledge.change_scope || "?"} scope · backend ${knowledge.backend_needed ? "yes" : "no"} — ${(knowledge.summary || "").slice(0, 80)}`,
       },
     ],
   };

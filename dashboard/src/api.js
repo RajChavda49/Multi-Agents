@@ -42,6 +42,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ feedback }),
     }),
+  retryPipeline: (id, reason, phase = "auto") =>
+    request(`/pipelines/${id}/retry`, {
+      method: "POST",
+      body: JSON.stringify({ reason, phase }),
+    }),
   jiraStatus: () => request("/jira/status"),
   repoStatus: () => request("/repo/status"),
   gitlabStatus: () => request("/gitlab/status"),

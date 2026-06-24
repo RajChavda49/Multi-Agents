@@ -1,62 +1,48 @@
-import { chatJson } from "../llm.js";
+import { chatJsonPlanning } from "../llm.js";
+import { getRetryPromptContext } from "../retry-context.js";
+import { reportAgentActivity } from "../../services/pipeline-progress.js";
+import { formatJiraBlock, formatSpecForA3 } from "../prompt-format.js";
 
-const SYSTEM = `You are A3 Test Case Agent. Generate a comprehensive test case library
-from the technical specification. Respond ONLY with valid JSON.`;
+const SYSTEM = `You are A3 Test Case Agent. Create test cases from the technical specification.
+
+Respond ONLY with valid JSON:
+{
+  "suite_name": "string",
+  "cases": [{
+    "id": "TC-001",
+    "title": "string",
+    "type": "e2e|api|visual|unit",
+    "priority": "P0|P1|P2",
+    "preconditions": ["string"],
+    "steps": ["string"],
+    "expected": "string"
+  }]
+}
+
+Rules:
+- Cover every acceptance criterion with at least one case
+- For change_scope "short" / ui_copy: prefer visual/e2e cases, skip API tests if backend_needed is false
+- Keep 3–8 focused cases, not an exhaustive suite`;
 
 export async function runA3TestCases(state) {
+  const task = state.jira_task;
   const spec = state.technical_spec;
   const startedAt = new Date().toISOString();
+  reportAgentActivity(state.pipeline_id, { current_agent: "A3" });
 
-  const mockPayload = {
-    suite_name: `${spec.title || "Feature"} — Phase 1 Test Plan`,
-    cases: [
-      {
-        id: "TC-001",
-        title: "Happy path — create record",
-        type: "e2e",
-        priority: "P0",
-        preconditions: ["User is authenticated", "Staging env is up"],
-        steps: [
-          "Navigate to feature page",
-          "Fill required fields",
-          "Submit form",
-        ],
-        expected: "Record appears in list with success toast",
-      },
-      {
-        id: "TC-002",
-        title: "Validation — required fields",
-        type: "e2e",
-        priority: "P1",
-        preconditions: ["User is on feature page"],
-        steps: ["Leave required field empty", "Click submit"],
-        expected: "Inline validation errors shown; no API call fired",
-      },
-      {
-        id: "TC-003",
-        title: "API — GET returns 200",
-        type: "api",
-        priority: "P0",
-        preconditions: ["Seed data exists"],
-        steps: ["GET /api/feature"],
-        expected: "200 with paginated JSON body",
-      },
-      {
-        id: "TC-004",
-        title: "Responsive layout",
-        type: "visual",
-        priority: "P2",
-        preconditions: ["Page loaded at 375px viewport"],
-        steps: ["Capture screenshot", "Compare to baseline"],
-        expected: "No layout overflow or clipped controls",
-      },
-    ],
-  };
+  const user = `${getRetryPromptContext(state)}${formatJiraBlock(task)}
 
-  const user = `Technical specification:
-${JSON.stringify(spec, null, 2)}`;
+=== TECHNICAL SPEC ===
+${JSON.stringify(formatSpecForA3(spec), null, 2)}
 
-  const testPlan = await chatJson(SYSTEM, user, mockPayload);
+Generate test cases aligned with the spec.`;
+
+  const testPlan = await chatJsonPlanning(SYSTEM, user, {
+    agent: "A3",
+    pipeline_id: state.pipeline_id,
+    num_predict: 900,
+    num_ctx: 4096,
+  });
 
   return {
     test_cases: testPlan.cases || [],
@@ -69,7 +55,7 @@ ${JSON.stringify(spec, null, 2)}`;
         status: "completed",
         started_at: startedAt,
         completed_at: new Date().toISOString(),
-        output_summary: `${(testPlan.cases || []).length} test cases generated`,
+        output_summary: `${(testPlan.cases || []).length} cases · ${spec.change_scope || "?"} scope`,
       },
     ],
   };

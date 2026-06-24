@@ -1,0 +1,11 @@
+backend/.env
+.env
+*.env.local
+
+backend/node_modules/
+dashboard/node_modules/
+node_modules/
+
+backend/data/repos/
+
+.DS_Store

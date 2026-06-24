@@ -113,7 +113,7 @@ program
       console.log("\n⏸  Awaiting Gate 1 approval. Run: sdlc approve " + pipeline.id);
     }
     if (pipeline.status === "awaiting_gate_2") {
-      console.log("Phase 2 coding done — review code at Gate 2. Run: sdlc approve-gate-2 " + pipeline.id);
+      console.log("Phase 2 complete (A7–A9) — awaiting Gate 2. Run: sdlc approve-gate-2 " + pipeline.id);
     }
     if (pipeline.status === "phase_2_complete") {
       console.log("Phase 2 complete — review, tests, and report finished.");
@@ -148,7 +148,10 @@ program
     console.log(`Gate 1 approved for ${pipeline.jira_task?.key}`);
     console.log(`Status: ${pipeline.status}`);
     if (pipeline.status === "awaiting_gate_2") {
-      console.log("Phase 2 coding done — awaiting Gate 2 (review code & tests).");
+      console.log("Phase 2 complete (A7–A9) — awaiting Gate 2 (review results).");
+    }
+    if (pipeline.status === "phase_2_running") {
+      console.log("Phase 2 in progress (coding → review → tests → report).");
     }
   });
 

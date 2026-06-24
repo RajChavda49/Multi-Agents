@@ -1,7 +1,14 @@
 import fs from "fs";
 import path from "path";
 import { config } from "../config.js";
-import { writeFilesToTargetRepo, isTargetRepoConfigured } from "../integrations/local-repo.js";
+import {
+  writeFilesToTargetRepo,
+  isTargetRepoConfigured,
+} from "../integrations/local-repo.js";
+import {
+  captureSnapshotsForWrite,
+  saveRepoSnapshotBackup,
+} from "../integrations/repo-revert.js";
 
 export function workspacePath(pipelineId) {
   return path.join(config.workspacesDir, pipelineId);
@@ -20,14 +27,22 @@ function writeToRoot(root, files) {
   return { root, written };
 }
 
-export function writeCodeFiles(pipelineId, files) {
+export function writeCodeFiles(pipelineId, files, priorSnapshots = {}) {
+  const snapshotMap = captureSnapshotsForWrite(files, priorSnapshots);
   const sandbox = writeToRoot(workspacePath(pipelineId), files);
-  const target = isTargetRepoConfigured() ? writeFilesToTargetRepo(files) : null;
+  const target = isTargetRepoConfigured()
+    ? writeFilesToTargetRepo(files, snapshotMap)
+    : null;
+
+  if (target?.snapshot_map) {
+    saveRepoSnapshotBackup(pipelineId, target.snapshot_map);
+  }
 
   return {
     sandbox_root: sandbox.root,
     written: sandbox.written,
     target_repo: target,
+    repo_snapshots: target?.snapshot_map || snapshotMap,
     write_target: target?.skipped ? "sandbox_only" : target ? "sandbox_and_local_repo" : "sandbox_only",
   };
 }

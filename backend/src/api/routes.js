@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { isJiraConfigured } from "../integrations/jira-client.js";
 import { getRepoStatus } from "../integrations/local-repo.js";
+import { checkOllamaConnection, checkGeminiConnection } from "../orchestrator/llm.js";
 import {
   listPipelines,
   getPipeline,
@@ -18,7 +19,9 @@ import {
   rejectGate2,
   parseJiraWebhook,
   removePipelineById,
+  retryPipeline,
   CreatePipelineSchema,
+  RetrySchema,
   GateDecisionSchema,
 } from "../services/pipeline-service.js";
 import jiraRoutes from "./jira-routes.js";
@@ -27,11 +30,14 @@ import gitlabRoutes from "./gitlab-routes.js";
 
 const router = Router();
 
-router.get("/health", (_req, res) => {
+router.get("/health", async (_req, res) => {
+  const [ollama, gemini] = await Promise.all([checkOllamaConnection(), checkGeminiConnection()]);
   res.json({
     ok: true,
     phases: [1, 2],
     agents: ["A1", "A2", "A3", "GATE_1", "A4", "A5", "A6", "A7", "A8", "A9", "GATE_2"],
+    ollama,
+    gemini,
     jira: { configured: isJiraConfigured() },
     repo: getRepoStatus(),
   });
@@ -132,6 +138,16 @@ router.post("/pipelines/:id/reject-gate-2", async (req, res) => {
   try {
     const { feedback } = GateDecisionSchema.parse(req.body || {});
     const pipeline = await rejectGate2(req.params.id, feedback || "Rejected");
+    res.json({ pipeline });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/pipelines/:id/retry", async (req, res) => {
+  try {
+    const input = RetrySchema.parse(req.body || {});
+    const pipeline = await retryPipeline(req.params.id, input);
     res.json({ pipeline });
   } catch (err) {
     res.status(400).json({ error: err.message });
