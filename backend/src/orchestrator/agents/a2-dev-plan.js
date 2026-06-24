@@ -1,4 +1,5 @@
 import { chatJson } from "../llm.js";
+import { getRepoPromptContext } from "../../integrations/local-repo.js";
 
 const SYSTEM = `You are A2 Dev Plan Agent. Generate a technical feature specification from
 knowledge context and the Jira task. Respond ONLY with valid JSON.`;
@@ -38,6 +39,8 @@ export async function runA2DevPlan(state) {
   };
 
   const user = `Jira: ${task.key} — ${task.summary}
+
+${getRepoPromptContext(knowledge)}
 
 Knowledge context:
 ${JSON.stringify(knowledge, null, 2)}`;

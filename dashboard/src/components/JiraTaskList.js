@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api.js";
 
+import StatusBadge from "./StatusBadge.js";
+
 function StatusPill({ status }) {
   return (
     <span className="rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide bg-slate-700 text-slate-300">
@@ -21,12 +23,8 @@ export default function JiraTaskList({
   const [error, setError] = useState(null);
   const [jql, setJql] = useState("");
 
-  const activeKeys = new Set(
-    (pipelines || [])
-      .filter(
-        (p) => !["gate_1_rejected", "failed", "completed"].includes(p.status),
-      )
-      .map((p) => p.jira_key?.toUpperCase()),
+  const pipelineByKey = Object.fromEntries(
+    (pipelines || []).map((p) => [p.jira_key?.toUpperCase(), p]),
   );
 
   const load = useCallback(async () => {
@@ -59,9 +57,10 @@ export default function JiraTaskList({
     setStartingKey(key);
     setError(null);
     try {
-      const { pipeline } = await api.createPipelineFromJira(key);
+      const { pipeline, existing } = await api.createPipelineFromJira(key);
       onStarted?.(pipeline);
       onStartPipeline?.(pipeline);
+      if (existing) return;
     } catch (err) {
       setError(err.message);
     } finally {
@@ -131,7 +130,8 @@ export default function JiraTaskList({
         )}
 
         {tasks.map((task) => {
-          const inPipeline = activeKeys.has(task.jira_key?.toUpperCase());
+          const key = task.jira_key?.toUpperCase();
+          const linked = pipelineByKey[key];
           return (
             <div
               key={task.jira_key}
@@ -149,6 +149,7 @@ export default function JiraTaskList({
                       {task.jira_key}
                     </a>
                     <StatusPill status={task.status} />
+                    {linked && <StatusBadge status={linked.status} />}
                     <span className="text-[10px] text-slate-500">
                       {task.issue_type}
                     </span>
@@ -164,13 +165,13 @@ export default function JiraTaskList({
                 </div>
                 <button
                   onClick={() => handleStart(task.jira_key)}
-                  disabled={inPipeline || startingKey === task.jira_key}
-                  className="shrink-0 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 text-xs font-medium"
+                  disabled={startingKey === task.jira_key}
+                  className="shrink-0 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 px-3 py-1.5 text-xs font-medium"
                 >
-                  {inPipeline
-                    ? "In pipeline"
-                    : startingKey === task.jira_key
-                      ? "Starting…"
+                  {startingKey === task.jira_key
+                    ? "Loading…"
+                    : linked
+                      ? "Open pipeline"
                       : "Start"}
                 </button>
               </div>

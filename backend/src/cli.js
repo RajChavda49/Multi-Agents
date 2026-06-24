@@ -112,6 +112,12 @@ program
     if (pipeline.status === "awaiting_gate_1") {
       console.log("\n⏸  Awaiting Gate 1 approval. Run: sdlc approve " + pipeline.id);
     }
+    if (pipeline.status === "awaiting_gate_2") {
+      console.log("Phase 2 coding done — review code at Gate 2. Run: sdlc approve-gate-2 " + pipeline.id);
+    }
+    if (pipeline.status === "phase_2_complete") {
+      console.log("Phase 2 complete — review, tests, and report finished.");
+    }
   });
 
 program
@@ -120,6 +126,14 @@ program
   .action(async (id) => {
     const { pipeline } = await request(`/pipelines/${id}`);
     console.log(JSON.stringify(pipeline, null, 2));
+  });
+
+program
+  .command("delete <id>")
+  .description("Delete a pipeline (allows starting a new run for the same Jira key)")
+  .action(async (id) => {
+    const result = await request(`/pipelines/${id}`, { method: "DELETE" });
+    console.log(`Deleted pipeline ${result.id}${result.jira_key ? ` (${result.jira_key})` : ""}`);
   });
 
 program
@@ -133,6 +147,9 @@ program
     });
     console.log(`Gate 1 approved for ${pipeline.jira_task?.key}`);
     console.log(`Status: ${pipeline.status}`);
+    if (pipeline.status === "awaiting_gate_2") {
+      console.log("Phase 2 coding done — awaiting Gate 2 (review code & tests).");
+    }
   });
 
 program
@@ -146,6 +163,32 @@ program
     });
     console.log(`Gate 1 rejected for ${pipeline.jira_task?.key}`);
     console.log(`Feedback: ${pipeline.gate_1_feedback}`);
+  });
+
+program
+  .command("approve-gate-2 <id>")
+  .description("Approve Gate 2 (code & test results)")
+  .option("-f, --feedback <text>", "Optional approval note")
+  .action(async (id, opts) => {
+    const { pipeline } = await request(`/pipelines/${id}/approve-gate-2`, {
+      method: "POST",
+      body: JSON.stringify({ feedback: opts.feedback }),
+    });
+    console.log(`Gate 2 approved for ${pipeline.jira_task?.key}`);
+    console.log(`Status: ${pipeline.status}`);
+  });
+
+program
+  .command("reject-gate-2 <id>")
+  .description("Reject Gate 2")
+  .option("-f, --feedback <text>", "Rejection reason", "Rejected via CLI")
+  .action(async (id, opts) => {
+    const { pipeline } = await request(`/pipelines/${id}/reject-gate-2`, {
+      method: "POST",
+      body: JSON.stringify({ feedback: opts.feedback }),
+    });
+    console.log(`Gate 2 rejected for ${pipeline.jira_task?.key}`);
+    console.log(`Feedback: ${pipeline.gate_2_feedback}`);
   });
 
 program.parse();

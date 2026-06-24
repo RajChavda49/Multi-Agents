@@ -12,6 +12,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [jiraConnected, setJiraConnected] = useState(false);
+  const [repoConnected, setRepoConnected] = useState(false);
+  const [repoSource, setRepoSource] = useState("none");
 
   const refreshList = useCallback(async () => {
     try {
@@ -39,6 +41,12 @@ export default function App() {
     Promise.all([
       refreshList(),
       api.jiraStatus().then((s) => setJiraConnected(Boolean(s.connected))).catch(() => {}),
+      api.repoStatus()
+        .then((s) => {
+          setRepoConnected(Boolean(s.connected));
+          setRepoSource(s.source || "none");
+        })
+        .catch(() => {}),
     ]).finally(() => setLoading(false));
   }, [refreshList]);
 
@@ -64,15 +72,34 @@ export default function App() {
     refreshList();
   }
 
+  async function handleDelete(pipelineId) {
+    await api.deletePipeline(pipelineId);
+    if (selectedId === pipelineId) {
+      setSelectedId(null);
+      setDetail(null);
+    }
+    await refreshList();
+  }
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold tracking-tight">SDLC Agents</h1>
-            <p className="text-xs text-slate-400">Phase 1 — Planning · A1 → A2 → A3 → Gate 1</p>
+            <p className="text-xs text-slate-400">Phase 1–2 · Planning → Development → Gate 2</p>
           </div>
           <div className="flex items-center gap-3 text-xs">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
+                repoConnected
+                  ? "bg-sky-950 text-sky-400 border border-sky-800"
+                  : "bg-slate-800 text-slate-500 border border-slate-700"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${repoConnected ? "bg-sky-400" : "bg-slate-600"}`} />
+              {repoSource === "gitlab" ? "GitLab" : "Repo"} {repoConnected ? "connected" : "offline"}
+            </span>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${
                 jiraConnected
@@ -101,6 +128,7 @@ export default function App() {
             pipeline={detail}
             onUpdate={handleUpdate}
             onBack={() => setSelectedId(null)}
+            onDelete={handleDelete}
           />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -117,6 +145,7 @@ export default function App() {
                 pipelines={pipelines}
                 selectedId={selectedId}
                 onSelect={setSelectedId}
+                onDelete={handleDelete}
               />
             </div>
             <div className="lg:col-span-2 flex items-center justify-center rounded-xl border border-dashed border-slate-700 text-slate-500 text-sm p-12">

@@ -1,12 +1,12 @@
 import { config } from "../config.js";
 
-export async function chatJson(system, user, mockPayload) {
+export async function chatJson(system, user, mockPayload, model = config.reasoningModel) {
   if (config.mockLlm) {
     return mockPayload;
   }
 
   const payload = {
-    model: config.reasoningModel,
+    model,
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -20,7 +20,7 @@ export async function chatJson(system, user, mockPayload) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(120_000),
+      signal: AbortSignal.timeout(180_000),
     });
 
     if (!response.ok) {
@@ -32,4 +32,8 @@ export async function chatJson(system, user, mockPayload) {
   } catch {
     return mockPayload;
   }
+}
+
+export async function chatJsonCoding(system, user, mockPayload) {
+  return chatJson(system, user, mockPayload, config.codingModel);
 }

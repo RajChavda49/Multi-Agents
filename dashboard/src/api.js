@@ -17,6 +17,7 @@ export const api = {
   health: () => request("/health"),
   listPipelines: () => request("/pipelines"),
   getPipeline: (id) => request(`/pipelines/${id}`),
+  deletePipeline: (id) => request(`/pipelines/${id}`, { method: "DELETE" }),
   createPipeline: (body) =>
     request("/pipelines", { method: "POST", body: JSON.stringify(body) }),
   createPipelineFromJira: (key) =>
@@ -31,7 +32,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ feedback }),
     }),
+  approveGate2: (id, feedback) =>
+    request(`/pipelines/${id}/approve-gate-2`, {
+      method: "POST",
+      body: JSON.stringify({ feedback }),
+    }),
+  rejectGate2: (id, feedback) =>
+    request(`/pipelines/${id}/reject-gate-2`, {
+      method: "POST",
+      body: JSON.stringify({ feedback }),
+    }),
   jiraStatus: () => request("/jira/status"),
+  repoStatus: () => request("/repo/status"),
+  gitlabStatus: () => request("/gitlab/status"),
+  gitlabSync: () => request("/gitlab/sync", { method: "POST" }),
   jiraTasks: (params = {}) => {
     const qs = new URLSearchParams();
     if (params.jql) qs.set("jql", params.jql);

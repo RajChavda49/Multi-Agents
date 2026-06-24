@@ -62,15 +62,34 @@ export function deletePipeline(id) {
   writeStore(store);
 }
 
+export function normalizeStatus(status, phase) {
+  if (status === "gate_1_approved" || status === "developing") return "phase_2_running";
+  if (status === "running") return phase === "development" ? "phase_2_running" : "phase_1_running";
+  return status;
+}
+
+export function getActivePipelineByJiraKey(jiraKey) {
+  const key = jiraKey?.toUpperCase();
+  const TERMINAL = ["gate_1_rejected", "gate_2_rejected", "failed", "completed", "phase_2_complete"];
+  return (
+    listPipelines().find(
+      (p) =>
+        p.jira_task?.key?.toUpperCase() === key && !TERMINAL.includes(normalizeStatus(p.status, p.phase)),
+    ) || null
+  );
+}
+
 export function toSummary(pipeline) {
+  const status = normalizeStatus(pipeline.status, pipeline.phase);
   return {
     id: pipeline.id,
     jira_key: pipeline.jira_task?.key,
     summary: pipeline.jira_task?.summary,
     phase: pipeline.phase,
-    status: pipeline.status,
+    status,
     current_agent: pipeline.current_agent,
     gate_1_approved: pipeline.gate_1_approved,
+    gate_2_approved: pipeline.gate_2_approved,
     created_at: pipeline.created_at,
     updated_at: pipeline.updated_at,
   };

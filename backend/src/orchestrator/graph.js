@@ -2,6 +2,14 @@ import { Annotation, StateGraph, START, END, interrupt, MemorySaver } from "@lan
 import { runA1Knowledge } from "./agents/a1-knowledge.js";
 import { runA2DevPlan } from "./agents/a2-dev-plan.js";
 import { runA3TestCases } from "./agents/a3-test-cases.js";
+import { runA4Frontend } from "./agents/a4-frontend.js";
+import { runA5Backend } from "./agents/a5-backend.js";
+import { runA6TestCoding } from "./agents/a6-test-coding.js";
+import { runA7CodeReview } from "./agents/a7-code-review.js";
+import { runA8TestExec } from "./agents/a8-test-exec.js";
+import { runA9Report } from "./agents/a9-report.js";
+import { writeCodeFiles, listWorkspaceFiles } from "./workspace.js";
+import { ensureRepoReady } from "../integrations/repo-target.js";
 
 const PipelineAnnotation = Annotation.Root({
   pipeline_id: Annotation(),
@@ -15,6 +23,17 @@ const PipelineAnnotation = Annotation.Root({
   test_suite_name: Annotation(),
   gate_1_approved: Annotation(),
   gate_1_feedback: Annotation(),
+  repo_source: Annotation(),
+  git_branch: Annotation(),
+  frontend_code: Annotation(),
+  backend_code: Annotation(),
+  test_code: Annotation(),
+  workspace_files: Annotation(),
+  code_review: Annotation(),
+  test_execution: Annotation(),
+  execution_report: Annotation(),
+  gate_2_approved: Annotation(),
+  gate_2_feedback: Annotation(),
   error: Annotation(),
   agent_logs: Annotation({
     reducer: (left, right) => {
@@ -67,7 +86,8 @@ async function gate1Node(state) {
   return {
     gate_1_approved: approved,
     gate_1_feedback: decision?.feedback || null,
-    status: approved ? "gate_1_approved" : "gate_1_rejected",
+    status: approved ? "phase_2_running" : "gate_1_rejected",
+    phase: approved ? "development" : state.phase,
     current_agent: "GATE_1",
     agent_logs: [
       {
@@ -76,11 +96,123 @@ async function gate1Node(state) {
         status: approved ? "approved" : "rejected",
         completed_at: new Date().toISOString(),
         output_summary: approved
-          ? "Spec & test plan approved for development"
+          ? "Spec & test plan approved — starting development"
           : `Rejected: ${decision?.feedback || "no feedback"}`,
       },
     ],
   };
+}
+
+function routeAfterGate1(state) {
+  return state.gate_1_approved ? "dev_parallel" : END;
+}
+
+async function devParallelNode(state) {
+  let repoReady = { source: "none", path: null, branch: null };
+  try {
+    repoReady = await ensureRepoReady({
+      id: state.pipeline_id,
+      pipeline_id: state.pipeline_id,
+      jira_task: state.jira_task,
+      git_branch: state.git_branch,
+    });
+  } catch (err) {
+    repoReady = { source: "error", path: null, branch: null, error: err.message };
+  }
+
+  const [a4, a5, a6] = await Promise.all([
+    runA4Frontend(state),
+    runA5Backend(state),
+    runA6TestCoding(state),
+  ]);
+
+  const allFiles = [
+    ...(a4.frontend_code?.files || []),
+    ...(a5.backend_code?.files || []),
+    ...(a6.test_code?.files || []),
+  ];
+
+  const writeResult = writeCodeFiles(state.pipeline_id, allFiles);
+  const workspace_files = listWorkspaceFiles(state.pipeline_id);
+
+  return {
+    phase: "development",
+    status: "phase_2_running",
+    current_agent: "A4-A6",
+    repo_source: repoReady.source,
+    git_branch: repoReady.branch,
+    repo_ready: repoReady,
+    frontend_code: a4.frontend_code,
+    backend_code: a5.backend_code,
+    test_code: a6.test_code,
+    workspace_files,
+    code_write_result: writeResult,
+    agent_logs: [...(a4.agent_logs || []), ...(a5.agent_logs || []), ...(a6.agent_logs || [])],
+  };
+}
+
+async function a7Node(state) {
+  return {
+    ...(await runA7CodeReview(state)),
+    status: "phase_2_running",
+    phase: "development",
+  };
+}
+
+async function a8Node(state) {
+  return {
+    ...(await runA8TestExec(state)),
+    status: "phase_2_running",
+    phase: "development",
+  };
+}
+
+async function a9Node(state) {
+  return {
+    ...(await runA9Report(state)),
+    status: "phase_2_complete",
+    phase: "development",
+    current_agent: "A9",
+  };
+}
+
+async function gate2Node(state) {
+  const decision = interrupt({
+    gate: "GATE_2",
+    message: "Review generated code and test scripts before automated review and test execution.",
+    pipeline_id: state.pipeline_id,
+    jira_key: state.jira_task?.key,
+    test_cases: state.test_cases,
+    test_suite_name: state.test_suite_name,
+    frontend_code: state.frontend_code,
+    backend_code: state.backend_code,
+    test_code: state.test_code,
+    workspace_files: state.workspace_files,
+  });
+
+  const approved = decision?.approved === true;
+
+  return {
+    gate_2_approved: approved,
+    gate_2_feedback: decision?.feedback || null,
+    status: approved ? "gate_2_approved" : "gate_2_rejected",
+    current_agent: "GATE_2",
+    agent_logs: [
+      {
+        agent: "GATE_2",
+        name: "Human Gate 2",
+        status: approved ? "approved" : "rejected",
+        completed_at: new Date().toISOString(),
+        output_summary: approved
+          ? "Code & test scripts approved — running review & test execution"
+          : `Rejected: ${decision?.feedback || "no feedback"}`,
+      },
+    ],
+  };
+}
+
+function routeAfterGate2(state) {
+  return state.gate_2_approved ? "a7_code_review" : END;
 }
 
 function buildGraph() {
@@ -89,11 +221,21 @@ function buildGraph() {
     .addNode("a2_dev_plan", a2Node)
     .addNode("a3_test_cases", a3Node)
     .addNode("gate_1", gate1Node)
+    .addNode("dev_parallel", devParallelNode)
+    .addNode("a7_code_review", a7Node)
+    .addNode("a8_test_exec", a8Node)
+    .addNode("a9_report", a9Node)
+    .addNode("gate_2", gate2Node)
     .addEdge(START, "a1_knowledge")
     .addEdge("a1_knowledge", "a2_dev_plan")
     .addEdge("a2_dev_plan", "a3_test_cases")
     .addEdge("a3_test_cases", "gate_1")
-    .addEdge("gate_1", END);
+    .addConditionalEdges("gate_1", routeAfterGate1, ["dev_parallel", END])
+    .addEdge("dev_parallel", "gate_2")
+    .addConditionalEdges("gate_2", routeAfterGate2, ["a7_code_review", END])
+    .addEdge("a7_code_review", "a8_test_exec")
+    .addEdge("a8_test_exec", "a9_report")
+    .addEdge("a9_report", END);
 
   const checkpointer = new MemorySaver();
   return graph.compile({ checkpointer });
@@ -112,14 +254,40 @@ export function graphConfig(pipelineId) {
   return { configurable: { thread_id: pipelineId } };
 }
 
-export async function isAwaitingGate1(pipelineId) {
+async function snapshotFor(pipelineId) {
   const graph = getGraph();
-  const snapshot = await graph.getState(graphConfig(pipelineId));
+  return graph.getState(graphConfig(pipelineId));
+}
+
+export async function isAwaitingGate1(pipelineId) {
+  const snapshot = await snapshotFor(pipelineId);
   const pendingGate = snapshot?.next?.includes("gate_1");
   const hasInterrupt = snapshot?.tasks?.some(
     (task) => task.name === "gate_1" && task.interrupts?.length > 0,
   );
   return pendingGate || hasInterrupt;
+}
+
+export async function isAwaitingGate2(pipelineId) {
+  const snapshot = await snapshotFor(pipelineId);
+  const pendingGate = snapshot?.next?.includes("gate_2");
+  const hasInterrupt = snapshot?.tasks?.some(
+    (task) => task.name === "gate_2" && task.interrupts?.length > 0,
+  );
+  return pendingGate || hasInterrupt;
+}
+
+export async function resolveStatus(pipelineId, result) {
+  if (await isAwaitingGate1(pipelineId)) return "awaiting_gate_1";
+  if (await isAwaitingGate2(pipelineId)) return "awaiting_gate_2";
+  if (result?.status === "phase_2_complete") return "phase_2_complete";
+  if (result?.gate_2_approved === false) return "gate_2_rejected";
+  if (result?.gate_1_approved === false) return "gate_1_rejected";
+  if (result?.phase === "development" || result?.gate_1_approved === true) {
+    return "phase_2_running";
+  }
+  if (result?.phase === "planning") return "phase_1_running";
+  return result?.status === "running" ? "phase_1_running" : result?.status || "phase_1_running";
 }
 
 export async function runPlanningPhase(initialState) {
@@ -130,40 +298,61 @@ export async function runPlanningPhase(initialState) {
     {
       ...initialState,
       phase: "planning",
-      status: "running",
+      status: "phase_1_running",
       agent_logs: [],
     },
     config,
   );
 
-  const interrupted = await isAwaitingGate1(initialState.pipeline_id);
-
-  if (interrupted) {
-    return {
-      ...result,
-      status: "awaiting_gate_1",
-      current_agent: "GATE_1",
-    };
-  }
-
-  return result;
+  const status = await resolveStatus(initialState.pipeline_id, result);
+  return { ...result, status, current_agent: status === "awaiting_gate_1" ? "GATE_1" : result.current_agent };
 }
 
 export async function resumeGate1(pipelineId, { approved, feedback = null }) {
   const graph = getGraph();
   const config = graphConfig(pipelineId);
-
   const { Command } = await import("@langchain/langgraph");
+
   const result = await graph.invoke(
     new Command({ resume: { approved, feedback } }),
     config,
   );
 
-  return result;
+  const status = await resolveStatus(pipelineId, result);
+  const current_agent =
+    status === "awaiting_gate_2"
+      ? "GATE_2"
+      : status === "phase_2_running"
+        ? result.current_agent
+        : status === "awaiting_gate_1"
+          ? "GATE_1"
+          : result.current_agent;
+
+  return { ...result, status, current_agent };
+}
+
+export async function resumeGate2(pipelineId, { approved, feedback = null }) {
+  const graph = getGraph();
+  const config = graphConfig(pipelineId);
+  const { Command } = await import("@langchain/langgraph");
+
+  const result = await graph.invoke(
+    new Command({ resume: { approved, feedback } }),
+    config,
+  );
+
+  const status = await resolveStatus(pipelineId, result);
+  const current_agent =
+    status === "awaiting_gate_2"
+      ? "GATE_2"
+      : status === "phase_2_complete"
+        ? "A9"
+        : result.current_agent;
+
+  return { ...result, status, current_agent };
 }
 
 export async function getGraphState(pipelineId) {
-  const graph = getGraph();
-  const snapshot = await graph.getState(graphConfig(pipelineId));
+  const snapshot = await snapshotFor(pipelineId);
   return snapshot?.values || null;
 }

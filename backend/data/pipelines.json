@@ -1,256 +1,317 @@
 {
   "pipelines": [
     {
-      "id": "554d1786-742f-4d38-9249-cd2d05d83043",
-      "pipeline_id": "554d1786-742f-4d38-9249-cd2d05d83043",
+      "id": "58a060b6-a9ec-4076-9a43-dadb2d4e074a",
+      "pipeline_id": "58a060b6-a9ec-4076-9a43-dadb2d4e074a",
       "jira_task": {
-        "key": "KAN-4",
-        "summary": "Change the footer text",
-        "description": "Testing perpose, change the title of project “AgentOps”.",
-        "issue_type": "Task",
-        "priority": "Medium",
-        "status": "To Do",
-        "assignee": "testh",
-        "url": "https://rajcodes49.atlassian.net/browse/KAN-4"
-      },
-      "phase": "planning",
-      "status": "gate_1_rejected",
-      "current_agent": "GATE_1",
-      "knowledge_context": {
-        "summary": "Knowledge context for KAN-4",
-        "relevant_modules": [
-          "src/components",
-          "src/api",
-          "src/hooks"
-        ],
-        "constraints": [
-          "Use existing design system tokens",
-          "Maintain backward-compatible API contracts"
-        ],
-        "dependencies": [
-          "auth middleware",
-          "shared UI primitives"
-        ],
-        "risks": [
-          "Cross-browser layout edge cases",
-          "API rate limits on bulk operations"
-        ],
-        "documentation_refs": [
-          "README.md",
-          "docs/architecture.md"
-        ],
-        "codebase_notes": "Feature should extend existing patterns; no new state management library."
-      },
-      "technical_spec": {
-        "title": "Change the footer text",
-        "overview": "Implement Change the footer text using existing React/Next.js patterns.",
-        "acceptance_criteria": [
-          "User can complete the primary workflow end-to-end",
-          "UI matches design system and is responsive",
-          "API endpoints return correct status codes and payloads"
-        ],
-        "frontend_tasks": [
-          "Add route/page component",
-          "Wire form state and validation",
-          "Connect to API layer with loading/error states"
-        ],
-        "backend_tasks": [
-          "Add REST endpoint(s) with input validation",
-          "Persist data with existing ORM patterns",
-          "Add unit tests for service layer"
-        ],
-        "data_model": {
-          "entities": [
-            "FeatureRecord"
-          ],
-          "fields": [
-            "id",
-            "title",
-            "status",
-            "createdAt"
-          ]
-        },
-        "api_contracts": [
-          {
-            "method": "GET",
-            "path": "/api/feature",
-            "description": "List records"
-          },
-          {
-            "method": "POST",
-            "path": "/api/feature",
-            "description": "Create record"
-          }
-        ],
-        "rollout_notes": "Ship behind feature flag; enable in staging first."
-      },
-      "test_cases": [
-        {
-          "id": "TC-001",
-          "title": "Happy path — create record",
-          "type": "e2e",
-          "priority": "P0",
-          "preconditions": [
-            "User is authenticated",
-            "Staging env is up"
-          ],
-          "steps": [
-            "Navigate to feature page",
-            "Fill required fields",
-            "Submit form"
-          ],
-          "expected": "Record appears in list with success toast"
-        },
-        {
-          "id": "TC-002",
-          "title": "Validation — required fields",
-          "type": "e2e",
-          "priority": "P1",
-          "preconditions": [
-            "User is on feature page"
-          ],
-          "steps": [
-            "Leave required field empty",
-            "Click submit"
-          ],
-          "expected": "Inline validation errors shown; no API call fired"
-        },
-        {
-          "id": "TC-003",
-          "title": "API — GET returns 200",
-          "type": "api",
-          "priority": "P0",
-          "preconditions": [
-            "Seed data exists"
-          ],
-          "steps": [
-            "GET /api/feature"
-          ],
-          "expected": "200 with paginated JSON body"
-        },
-        {
-          "id": "TC-004",
-          "title": "Responsive layout",
-          "type": "visual",
-          "priority": "P2",
-          "preconditions": [
-            "Page loaded at 375px viewport"
-          ],
-          "steps": [
-            "Capture screenshot",
-            "Compare to baseline"
-          ],
-          "expected": "No layout overflow or clipped controls"
-        }
-      ],
-      "test_suite_name": "Change the footer text — Phase 1 Test Plan",
-      "gate_1_approved": false,
-      "gate_1_feedback": "Rejected from dashboard",
-      "error": null,
-      "agent_logs": [
-        {
-          "agent": "A1",
-          "name": "Knowledge Agent",
-          "status": "completed",
-          "started_at": "2026-06-23T12:17:47.685Z",
-          "completed_at": "2026-06-23T12:17:47.685Z",
-          "output_summary": "Knowledge context for KAN-4"
-        },
-        {
-          "agent": "A2",
-          "name": "Dev Plan Agent",
-          "status": "completed",
-          "started_at": "2026-06-23T12:17:47.687Z",
-          "completed_at": "2026-06-23T12:17:47.688Z",
-          "output_summary": "Implement Change the footer text using existing React/Next.js patterns."
-        },
-        {
-          "agent": "A3",
-          "name": "Test Case Agent",
-          "status": "completed",
-          "started_at": "2026-06-23T12:17:47.689Z",
-          "completed_at": "2026-06-23T12:17:47.689Z",
-          "output_summary": "4 test cases generated"
-        },
-        {
-          "agent": "A1",
-          "name": "Knowledge Agent",
-          "status": "completed",
-          "started_at": "2026-06-23T12:17:47.685Z",
-          "completed_at": "2026-06-23T12:17:47.685Z",
-          "output_summary": "Knowledge context for KAN-4"
-        },
-        {
-          "agent": "A2",
-          "name": "Dev Plan Agent",
-          "status": "completed",
-          "started_at": "2026-06-23T12:17:47.687Z",
-          "completed_at": "2026-06-23T12:17:47.688Z",
-          "output_summary": "Implement Change the footer text using existing React/Next.js patterns."
-        },
-        {
-          "agent": "A3",
-          "name": "Test Case Agent",
-          "status": "completed",
-          "started_at": "2026-06-23T12:17:47.689Z",
-          "completed_at": "2026-06-23T12:17:47.689Z",
-          "output_summary": "4 test cases generated"
-        },
-        {
-          "agent": "GATE_1",
-          "name": "Human Gate 1",
-          "status": "rejected",
-          "completed_at": "2026-06-23T12:20:56.450Z",
-          "output_summary": "Rejected: Rejected from dashboard"
-        }
-      ],
-      "created_at": "2026-06-23T12:17:47.669Z",
-      "updated_at": "2026-06-23T12:20:56.453Z"
-    },
-    {
-      "id": "d4ebea3a-5025-46dd-a525-dd49297a3ba9",
-      "pipeline_id": "d4ebea3a-5025-46dd-a525-dd49297a3ba9",
-      "jira_task": {
-        "key": "KAN-5",
-        "summary": "Content Update: Refine Header Titles for Improved User Clarity",
-        "description": "Goal: Update specific page titles to better align with user expectations and improve accessibility/SEO.\nAcceptance Criteria:\n[ ] Update <h1> tags on the [Dashboard/Landing Page/Settings] page.\n[ ] Ensure the new titles are concise (under 60 characters) while remaining descriptive.\n[ ] Verify that the updated titles are reflected in the browser tab (document.title).\n[ ] Conduct a quick accessibility check to ensure the new H1 hierarchy remains semantic and valid.\nTechnical Notes:\nLocate the title variables in the constants/ui-content.js file.\nEnsure the changes are applied across all localized versions if applicable.\nCheck that the updated titles do not break any existing responsive styles or text overflows.",
+        "key": "KAN-6",
+        "summary": "UI Content Update: Replace Social Media Header Text",
+        "description": "Description\nUpdate the text in the footer section to personalize the branding. Specifically, replace the existing text \"Add us on social media?\" with \"Raj chavda\".\nWhat to Change\nTarget Text: Replace the string \"Add us on social media?\" with \"Raj chavda\".\nAcceptance Criteria\n[ ] The text \"Add us on social media?\" is successfully removed.\n[ ] The text \"Raj chavda\" is correctly rendered in its place.\n[ ] The update does not cause any layout distortion or text overflow in the footer or designated section.\n[ ] The styling (font, size, alignment) of \"Raj chavda\" matches the original design requirements.",
         "issue_type": "Task",
         "priority": "Medium",
         "status": "To Do",
         "assignee": "Raj Chavda",
-        "url": "https://rajcodes49.atlassian.net/browse/KAN-5"
+        "url": "https://rajcodes49.atlassian.net/browse/KAN-6"
       },
       "phase": "planning",
       "status": "awaiting_gate_1",
       "current_agent": "GATE_1",
       "knowledge_context": {
-        "summary": "Knowledge context for KAN-5",
+        "summary": "Codebase: bannerbuzz-nextjs (next.js, react, express)",
+        "repo_connected": true,
+        "repo_path": "/home/cp/cp_projects/bannerbuzz-nextjs",
+        "project_name": "bannerbuzz-nextjs",
+        "stack": [
+          "next.js",
+          "react",
+          "express"
+        ],
         "relevant_modules": [
-          "src/components",
-          "src/api",
-          "src/hooks"
+          "components/",
+          "components/AffiliateProgram/",
+          "components/AffiliateProgram/Banner/",
+          "components/AffiliateProgram/ExampleOffer/",
+          "components/AffiliateProgram/FAQ/",
+          "components/AffiliateProgram/HowItWorks/",
+          "components/AffiliateProgram/PageContent/",
+          "components/AffiliateProgram/ProgramHighlights/",
+          "components/Alerts/",
+          "components/Alerts2/",
+          "components/AreasOfService/",
+          "components/AreasOfService/CityOfDetails/",
+          "components/AreasOfService/CityOfDetails/CommonGrid2/",
+          "components/AreasOfService/Local/",
+          "components/BbHome/"
+        ],
+        "matched_files": [
+          {
+            "path": "components/AffiliateProgram/PageContent/PageContent.js",
+            "snippet": "import React from 'react';\nimport { useSelector } from 'react-redux';\n// import Tabs from 'react-bootstrap/lib/Tabs';\n// import Tab from 'react-bootstrap/lib/Tab';\n// import PanelGroup from 'react-bootstrap/lib/PanelGroup';\n// import Panel from 'react-bootstrap/lib/Panel';\nimport { Panel, PanelGroup } from '@/components/Common/Panel';\nimport { Tabs, Tab } from '@/components/Common/Tabs';\nimport Panelstyled from '@/theme/custom/Panelstyled';\nimport Tabsstyled from '@/theme/custom/Tabsstyled';\nimport ProgramHighlights from '../ProgramHighlights/ProgramHighlights';\nimport Howitworks from '../HowItWorks/HowItWorks';\nimport Exampleoffer from '../ExampleOffer/ExampleOffer';\nimport Faq from '../FAQ/Faq';\n\nconst PageContent = () => {\n  const { storedata } = useSelector((store) => store.app);\n  const { deviceType } = storedata;\n  return (\n    <div className=\"container\">\n      <div className=\"topContentBox\">\n        10%. Yes, by being a BB affiliate you can earn up to 10% on every order generated on your website. One of the highest commission payers in the industry,\n        BB also offers support at all times, and quality products your customers will appreciate.\n        <hr />\n      </div>\n      <div className=\"pageTitleBox\">\n        <h1>Sign up & Start Earning today!</h1>\n        <a className=\"btn btnPrimary\" href=\"https://www.ascendpartner.com/affiliate/registration?refid=219983\" target=\"_blank\">\n          Sign me up now\n        </a>\n      </div>\n      <div className=\"clearfix\" />\n  "
+          },
+          {
+            "path": "components/BbNewHome/HeroBannerSection.js",
+            "snippet": "import React from 'react';\nimport { useSelector } from 'react-redux';\nimport Link from 'next/link';\nimport { ADVANCE_HTML, NORMAL_TEXT, SINGLE_BANNER, SINGLE_FOLD_ONE_HTML, TWO_FOLD_TWO_HTML } from '@/utils/defaultConst';\nimport Button from 'DesignSystem/Button/Button';\nimport { checkIsPrivilegedUser } from '@/utils/commonFunction';\nimport { setAdobeHeroBannerClk } from '@/utils/common/AdobeEvents/newhomepageAdobeEvents';\nimport SliderWrapper from '../Common/SliderWrapper/SliderWrapper';\nimport TrustBagdeStyled from '../Common/TrustBagde/TrustBagdeStyle';\nimport TrustBagde from '../Common/TrustBagde/TrustBagde';\nimport HeroBannerSectionStyled from './HeroBannerSectionStyled';\n\nconst HeroBannerSection = () => {\n  const newBannerData = useSelector((store) => store.home.newBanner);\n  const deviceType = useSelector((store) => store.app.storedata?.deviceType);\n  const { profile } = useSelector((store) => store.customer);\n\n  const trustPoints = [\n    { img: '/static/images/trust/trust-1.svg', value: '10M+', label: 'Customers Served' },\n    { img: '/static/images/trust/trust-2.svg', value: 'Customized', label: 'Premium Quality' },\n    { img: '/static/images/trust/trust-3.svg', value: 'Guaranteed', label: 'Color Match' },\n    { img: '/static/images/trust/trust-4.svg', value: '10K+', label: 'Custom Products' },\n  ];\n\n  const isPrivilegedUser = checkIsPrivilegedUser(profile?.customer_extra_fields?.group_code || 'not_logged_in');\n\n  const banners = isPrivilegedUser ? newBannerData?.priv"
+          },
+          {
+            "path": "components/BbNewHome/HeroBannerSectionStyled.js",
+            "snippet": "import styled from 'styled-components';\nimport { boxshadow, borderradius } from '@/theme/custom/mixins';\n\nexport default styled.div`\n  width: 100%;\n  position: relative;\n  overflow: hidden;\n  font-family: ${({ theme }) => theme.dsFonts.fontoverpassregular};\n  color: ${({ theme }) => theme.dsColors.black};\n  display: block;\n  line-height: 1;\n  .slick-slide {\n    height: 450px;\n    @media (max-width: ${({ theme }) => theme.container.screensm}) {\n      height: 400px;\n    }\n  }\n  .hero-item {\n    display: block;\n    width: 100%;\n    position: relative;\n    @media (min-width: ${({ theme }) => theme.container.screensm}) {\n      &.items2 {\n        overflow: hidden;\n        display: grid;\n        grid-template-columns: 1fr 1fr;\n        gap: 0;\n        .item {\n          > a {\n            display: block;\n            overflow: hidden;\n            transform: skewX(-6deg);\n            height: 100%;\n          }\n          .banner-content, .banner-content-custom {\n            max-width: 332px;\n          }\n          &:first-child > a {\n            margin-left: -40px;\n          }\n          &:last-child {\n            > a {\n              border-left: 5px solid ${({ theme }) => theme.dsColors.white};\n              margin-right: -40px;\n            }\n            .banner-content, .banner-content-custom {\n              transform: skewX(-6deg) translateY(-50%);\n              margin-left: -7px;\n              .content {\n                transform: skewX(6deg);\n              }\n            }\n            .b"
+          },
+          {
+            "path": "components/Cart/CartItems/CartHeaderSkeleton.js",
+            "snippet": "import React from 'react';\nimport Skeleton from 'react-loading-skeleton';\nimport CartHeaderSkeletonstyled from './CartHeaderSkeletonstyled';\n\n/**\n * Skeleton for cart header row (mobile): \"Shopping Cart (X Item)\" + \"Continue Shopping\".\n */\nconst CartHeaderSkeleton = () => (\n  <CartHeaderSkeletonstyled>\n    <Skeleton className=\"skeletonTitle\" />\n    <Skeleton className=\"skeletonLink\" />\n  </CartHeaderSkeletonstyled>\n);\n\nexport default CartHeaderSkeleton;\n"
+          },
+          {
+            "path": "components/Cart/CartItems/CartHeaderSkeletonstyled.js",
+            "snippet": "import styled from 'styled-components';\n\n/**\n * Skeleton for cart header row: \"Shopping Cart (1 Item)\" left, \"Continue Shopping\" right.\n * Mobile-only; use inside mobile loading placeholder or when deviceType == 1.\n */\nexport default styled.div`\n  display: none;\n\n  @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n    display: flex;\n    justify-content: space-between;\n    align-items: center;\n    width: 100%;\n    padding: 0 16px;\n    margin: 0 0 16px 0;\n\n    .skeletonTitle {\n      width: 160px;\n      height: 20px;\n    }\n    .skeletonLink {\n      width: 120px;\n      height: 18px;\n    }\n  }\n\n  .react-loading-skeleton {\n    border-radius: 6px;\n  }\n`;\n"
+          },
+          {
+            "path": "components/Cart/CouponSection/CouponOfferMobilestyled.js",
+            "snippet": "import styled from 'styled-components';\nimport getConfig from 'next/config';\nimport { transform, calcsize, borderradius } from '@/theme/custom/mixins';\nconst { publicRuntimeConfig } = getConfig();\nconst erroricon = `background: url(${publicRuntimeConfig.CDN_FOR_STATIC_DATA}/static/images/error-coupon-code.svg) no-repeat left top !important;`;\n\nexport default styled.div`\n  width: 100%;\n  float: left;\n  position: fixed;\n  z-index: 9999;\n  /* display: ${(props) => (props.isPopup ? '' : 'none')}; */\n  .newCouponCode {\n    &.show {\n      .alertPopupBody {\n        padding: 20px;\n      }\n      .alertPopupBox {\n        .btnpopupclose {\n          top: 8px;\n          right: 8px;\n        }\n      }\n      .btn {\n        height: 38px;\n      }\n    }\n  }\n  .couponimgsec {\n    float: left;\n    width: 100%;\n    position: relative;\n    margin-top: 10px;\n    img {\n      width: 100%;\n    }\n  }\n  .popupMain {\n    position: fixed;\n    z-index: 999;\n\n    .scrollheight {\n      width: 350px !important;\n      height: 800px !important;\n      @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n        height: 322px !important;\n      }\n      @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n        width: 315px !important;\n        height: 306px !important;\n      }\n    }\n    .DiscountPopup {\n      height: 100%;\n      animation: fadeinright 0.5s;\n      animation-direction: linear infinite alternate;\n      position: fixed;\n      z-index: 999;\n      text-align: center;\n      backgr"
+          },
+          {
+            "path": "components/Cart/CouponSection/CouponSection.js",
+            "snippet": "import React from 'react';\nimport PropTypes from 'prop-types';\n// import getConfig from 'next/config';\nimport { connect } from 'react-redux';\nimport { bindActionCreators } from 'redux';\nimport find from 'lodash-es/find';\nimport findIndex from 'lodash-es/findIndex';\nimport { validate } from '@/utils/validation';\nimport { createHeader } from '@/utils/api';\nimport CartAddressInput from '@/graphql/dataObject/CartAddressInput';\nimport {\n  setShippingAddressesOnCart,\n  setShippingMethodsOnCart,\n  cartDataLoad,\n  miniCartDataLoad,\n  cartDataVPLoad,\n  applyCouponToCartMutation,\n  removeCouponFromCartMutation,\n  getCouponOffersApi,\n} from '@/api/CartApi';\nimport { processRedirectionIfSet } from '@/utils/common/redirectBasedOn';\nimport { isLoading } from '@/redux/actions/CommonAction';\nimport UserContext from '@/components/Context/UserContext';\nimport { dataLayerPush } from '@/utils/gtm';\nimport { setCPExtraAttributes, setCouponCodeMsg } from '@/redux/actions/CartAction';\nimport { getCurrentDate, getCurrentTime } from '@/utils/commonFunction';\nimport { getAndSetMCUpdateFlag, checkIsFreeBieProductAvailable } from '@/utils/common/mcUpdateFlag';\nimport sumBy from 'lodash-es/sumBy';\nimport { printAmount } from '@/utils/format';\n// import { checkIsDealer } from '@/utils/common/checkIsDealer';\nimport AlertPopup from '../../Common/AlertPopup/AlertPopup';\nimport Alert from '../../Alerts2/Alerts2';\nimport {\n  setAdobeApplyCoupon,\n  setAdobeApplyCouponCodeError,\n  setAdobeAvailableOffers,\n  // s"
+          },
+          {
+            "path": "components/Cart/CouponSection/CouponSectionList.js",
+            "snippet": "/* eslint-disable no-negated-condition */\nimport React, { useState, useEffect, useRef } from 'react';\nimport PropTypes from 'prop-types';\nimport { isMacOs, isSafari, isAndroid } from 'react-device-detect';\nimport { useSelector } from 'react-redux';\nimport CouponSectionListstyled from './CouponSectionListstyled';\n\nconst CouponSectionList = ({ onClickButton, isApplyEnabled, AppliedcouponCode, availableOffers }) => {\n  const [collapsedState, setCollapsedState] = useState({});\n  const { storedata } = useSelector((store) => store.app);\n\n  const tncRefs = useRef(new Map()); // Refs for T&C sections\n  const containerRef = useRef(null); // ref to scroll container\n\n  // Set all offer T&Cs as collapsed by default on first render\n  useEffect(() => {\n    if (availableOffers && availableOffers.length > 0) {\n      const initialCollapseState = {};\n      availableOffers.forEach((offer) => {\n        if (offer?.offer_code) {\n          initialCollapseState[offer.offer_code] = true; // collapsed = true\n        }\n      });\n      setCollapsedState(initialCollapseState);\n    }\n  }, [availableOffers]);\n\n  const toggleCollapse = (offerCode) => {\n    setCollapsedState((prevState) => {\n      const newState = {\n        ...prevState,\n        [offerCode]: !prevState[offerCode],\n      };\n\n      // Only when expanding\n      const isExpanding = !newState[offerCode];\n\n      if (isExpanding) {\n        setTimeout(() => {\n          const el = tncRefs.current.get(offerCode);\n          const container = containerR"
+          }
+        ],
+        "key_files": [
+          "package.json",
+          "README.md",
+          "next.config.js"
+        ],
+        "package_scripts": [
+          "start",
+          "winstart",
+          "build",
+          "winbuild",
+          "serve",
+          "serve:win",
+          "precommit",
+          "lint-css",
+          "lint-js",
+          "start:production",
+          "analyze",
+          "lint",
+          "prepare",
+          "pre-commit",
+          "postinstall",
+          "minify-css"
         ],
         "constraints": [
-          "Use existing design system tokens",
-          "Maintain backward-compatible API contracts"
+          "Follow existing project structure and naming conventions",
+          "Stack: next.js, react, express",
+          "Reuse existing patterns found in matched files"
         ],
         "dependencies": [
-          "auth middleware",
-          "shared UI primitives"
+          "next.js",
+          "react",
+          "express"
         ],
         "risks": [
-          "Cross-browser layout edge cases",
-          "API rate limits on bulk operations"
+          "Generated files must align with existing module boundaries"
         ],
         "documentation_refs": [
-          "README.md",
-          "docs/architecture.md"
+          "README.md"
         ],
-        "codebase_notes": "Feature should extend existing patterns; no new state management library."
+        "codebase_notes": "Indexed 504 paths from /home/cp/cp_projects/bannerbuzz-nextjs. 8 files matched Jira task keywords.",
+        "file_tree_sample": [
+          {
+            "path": ".babelrcdd",
+            "type": "file",
+            "size": 233
+          },
+          {
+            "path": ".dockerignore",
+            "type": "file",
+            "size": 184
+          },
+          {
+            "path": ".env.development",
+            "type": "file",
+            "size": 76222
+          },
+          {
+            "path": ".env.production",
+            "type": "file",
+            "size": 68167
+          },
+          {
+            "path": ".eslintrc",
+            "type": "file",
+            "size": 1853
+          },
+          {
+            "path": ".gitattributes",
+            "type": "file",
+            "size": 727
+          },
+          {
+            "path": ".gitignore",
+            "type": "file",
+            "size": 792
+          },
+          {
+            "path": ".husky/",
+            "type": "dir"
+          },
+          {
+            "path": ".husky/_/",
+            "type": "dir"
+          },
+          {
+            "path": ".husky/_/.gitignore",
+            "type": "file",
+            "size": 1
+          },
+          {
+            "path": ".husky/_/husky.sh",
+            "type": "file",
+            "size": 717
+          },
+          {
+            "path": ".prettierrc",
+            "type": "file",
+            "size": 72
+          },
+          {
+            "path": ".stylelintrc.js",
+            "type": "file",
+            "size": 2347
+          },
+          {
+            "path": "DesignSystem/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Button/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Button/Button.js",
+            "type": "file",
+            "size": 3025
+          },
+          {
+            "path": "DesignSystem/Button/ButtonStyled.js",
+            "type": "file",
+            "size": 1585
+          },
+          {
+            "path": "DesignSystem/Image/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Image/Image.js",
+            "type": "file",
+            "size": 1828
+          },
+          {
+            "path": "DesignSystem/Input/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Typography/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Typography/Typograph.js",
+            "type": "file",
+            "size": 920
+          },
+          {
+            "path": "DesignSystem/Typography/TypographyStyled.js",
+            "type": "file",
+            "size": 10482
+          },
+          {
+            "path": "DesignSystem/theme/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/theme/themeBbDs.js",
+            "type": "file",
+            "size": 2966
+          },
+          {
+            "path": "DesignSystem/theme/themeBosDs.js",
+            "type": "file",
+            "size": 0
+          },
+          {
+            "path": "DesignSystem/utils/",
+            "type": "dir"
+          },
+          {
+            "path": "Dockerfile",
+            "type": "file",
+            "size": 1571
+          },
+          {
+            "path": "Dockerfile-local",
+            "type": "file",
+            "size": 501
+          },
+          {
+            "path": "README.md",
+            "type": "file",
+            "size": 522
+          },
+          {
+            "path": "Readme.md",
+            "type": "file",
+            "size": 522
+          },
+          {
+            "path": "analyze/",
+            "type": "dir"
+          },
+          {
+            "path": "api/",
+            "type": "dir"
+          },
+          {
+            "path": "api/AdminOrderApi.js",
+            "type": "file",
+            "size": 618
+          },
+          {
+            "path": "api/AffiliateProgram.js",
+            "type": "file",
+            "size": 574
+          },
+          {
+            "path": "api/AreasOfService.js",
+            "type": "file",
+            "size": 641
+          },
+          {
+            "path": "api/CartApi.js",
+            "type": "file",
+            "size": 51885
+          },
+          {
+            "path": "api/CategoryList.js",
+            "type": "file",
+            "size": 1544
+          },
+          {
+            "path": "api/CharityApi.js",
+            "type": "file",
+            "size": 2173
+          },
+          {
+            "path": "api/CheckoutApi.js",
+            "type": "file",
+            "size": 31545
+          }
+        ]
       },
       "technical_spec": {
-        "title": "Content Update: Refine Header Titles for Improved User Clarity",
-        "overview": "Implement Content Update: Refine Header Titles for Improved User Clarity using existing React/Next.js patterns.",
+        "title": "UI Content Update: Replace Social Media Header Text",
+        "overview": "Implement UI Content Update: Replace Social Media Header Text using existing React/Next.js patterns.",
         "acceptance_criteria": [
           "User can complete the primary workflow end-to-end",
           "UI matches design system and is responsive",
@@ -350,38 +411,47 @@
           "expected": "No layout overflow or clipped controls"
         }
       ],
-      "test_suite_name": "Content Update: Refine Header Titles for Improved User Clarity — Phase 1 Test Plan",
+      "test_suite_name": "UI Content Update: Replace Social Media Header Text — Phase 1 Test Plan",
       "gate_1_approved": null,
       "gate_1_feedback": null,
+      "frontend_code": null,
+      "backend_code": null,
+      "test_code": null,
+      "workspace_files": [],
+      "code_review": null,
+      "test_execution": null,
+      "execution_report": null,
+      "gate_2_approved": null,
+      "gate_2_feedback": null,
       "error": null,
       "agent_logs": [
         {
           "agent": "A1",
           "name": "Knowledge Agent",
           "status": "completed",
-          "started_at": "2026-06-23T12:21:14.630Z",
-          "completed_at": "2026-06-23T12:21:14.630Z",
-          "output_summary": "Knowledge context for KAN-5"
+          "started_at": "2026-06-24T09:43:28.096Z",
+          "completed_at": "2026-06-24T09:43:28.100Z",
+          "output_summary": "Codebase: bannerbuzz-nextjs (next.js, react, express)"
         },
         {
           "agent": "A2",
           "name": "Dev Plan Agent",
           "status": "completed",
-          "started_at": "2026-06-23T12:21:14.631Z",
-          "completed_at": "2026-06-23T12:21:14.631Z",
-          "output_summary": "Implement Content Update: Refine Header Titles for Improved User Clarity using existing React/Next.js patterns."
+          "started_at": "2026-06-24T09:43:28.102Z",
+          "completed_at": "2026-06-24T09:43:28.103Z",
+          "output_summary": "Implement UI Content Update: Replace Social Media Header Text using existing React/Next.js patterns."
         },
         {
           "agent": "A3",
           "name": "Test Case Agent",
           "status": "completed",
-          "started_at": "2026-06-23T12:21:14.633Z",
-          "completed_at": "2026-06-23T12:21:14.633Z",
+          "started_at": "2026-06-24T09:43:28.104Z",
+          "completed_at": "2026-06-24T09:43:28.105Z",
           "output_summary": "4 test cases generated"
         }
       ],
-      "created_at": "2026-06-23T12:21:14.627Z",
-      "updated_at": "2026-06-23T12:21:14.635Z"
+      "created_at": "2026-06-24T09:43:28.093Z",
+      "updated_at": "2026-06-24T09:43:28.110Z"
     }
   ]
 }
