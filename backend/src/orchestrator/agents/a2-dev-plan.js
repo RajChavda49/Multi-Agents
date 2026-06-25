@@ -22,9 +22,11 @@ Respond ONLY with valid JSON:
 
 Rules:
 - Honor A1 change_scope and backend_needed unless Jira clearly contradicts
-- For change_scope "short": frontend_tasks must name exact files and the exact string/UI change
+- For change_scope "short": frontend_tasks must name exact files from A1 files_to_edit and the exact string/UI change
+- Use ONLY paths from files_to_edit — never invent src/components paths if the repo uses components/
 - backend_tasks must be [] when backend_needed is false
-- Do not invent API work for UI-only copy changes`;
+- Do not invent API work for UI-only copy changes
+- If files_to_edit is empty, say so in rollout_notes — do not guess file paths`;
 
 export async function runA2DevPlan(state) {
   const task = state.jira_task;

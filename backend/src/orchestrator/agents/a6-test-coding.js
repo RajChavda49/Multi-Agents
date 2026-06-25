@@ -1,6 +1,7 @@
 import { chatJsonCoding } from "../llm.js";
 import { getRetryPromptContext } from "../retry-context.js";
-import { formatJiraBlock, formatSpecForCoding } from "../prompt-format.js";
+import { formatJiraBlockCompact, formatSpecForCoding } from "../prompt-format.js";
+import { reportAgentStarted, reportAgentFinished } from "../../services/pipeline-progress.js";
 
 const SYSTEM = `You are A6 Test Coding Agent. Write tests for the planned changes.
 
@@ -22,30 +23,36 @@ export async function runA6TestCoding(state) {
   const task = state.jira_task;
   const knowledge = state.knowledge_context;
   const startedAt = new Date().toISOString();
+  reportAgentStarted(state.pipeline_id, "A6", {
+    status: "phase_2_running",
+    phase: "development",
+  });
 
-  const user = `${getRetryPromptContext(state)}${formatJiraBlock(task)}
+  try {
+    const user = `${getRetryPromptContext(state)}${formatJiraBlockCompact(task)}
 
 === SPEC ===
-${JSON.stringify(formatSpecForCoding(spec, knowledge), null, 2)}
+${JSON.stringify(formatSpecForCoding(spec, knowledge, { includeContent: false }), null, 2)}
 
 === TEST CASES ===
-${JSON.stringify(testCases.slice(0, 8), null, 2)}
+${JSON.stringify(testCases.slice(0, 4), null, 2)}`;
 
-Generate test files only (backend agent skipped for this pipeline).`;
+    const result = await chatJsonCoding(SYSTEM, user, { agent: "A6", pipeline_id: state.pipeline_id });
 
-  const result = await chatJsonCoding(SYSTEM, user, { agent: "A6", pipeline_id: state.pipeline_id });
-
-  return {
-    test_code: result,
-    agent_logs: [
-      {
-        agent: "A6",
-        name: "Test Coding Agent",
-        status: "completed",
-        started_at: startedAt,
-        completed_at: new Date().toISOString(),
-        output_summary: `${(result.files || []).length} test file(s)`,
-      },
-    ],
-  };
+    return {
+      test_code: result,
+      agent_logs: [
+        {
+          agent: "A6",
+          name: "Test Coding Agent",
+          status: "completed",
+          started_at: startedAt,
+          completed_at: new Date().toISOString(),
+          output_summary: `${(result.files || []).length} test file(s)`,
+        },
+      ],
+    };
+  } finally {
+    reportAgentFinished(state.pipeline_id, "A6");
+  }
 }

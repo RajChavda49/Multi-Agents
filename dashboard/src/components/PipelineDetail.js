@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import StatusBadge from "./StatusBadge.js";
 import AgentTimeline from "./AgentTimeline.js";
 import { api } from "../api.js";
@@ -109,24 +109,91 @@ function RetryPanel({ pipeline, retryReason, setRetryReason, loading, onRetry })
     <div className="rounded-xl border border-violet-500/40 bg-violet-950/20 p-5 space-y-3">
       <p className="text-violet-200 font-medium">↻ Retry pipeline</p>
       <p className="text-xs text-violet-200/70">
-        Not satisfied with the output? Explain what went wrong and agents will run
-        again with your feedback.{" "}
+        Not satisfied with the output? Retry the pipeline — optionally add a comment so
+        agents know what to fix.{" "}
         {retryPhaseLabel(pipeline.status, pipeline.gate_1_approved)}
       </p>
       <textarea
         value={retryReason}
         onChange={(e) => setRetryReason(e.target.value)}
-        placeholder="What is wrong or missing? e.g. spec missed the checkout flow, tests don't cover edge cases…"
+        placeholder="Optional: what went wrong? e.g. spec missed the checkout flow…"
         rows={3}
         className="w-full rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm"
       />
       <button
         type="button"
         onClick={onRetry}
-        disabled={loading || !retryReason.trim()}
+        disabled={loading}
         className="rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-4 py-2 text-sm font-medium"
       >
-        {loading ? "Retrying…" : "Retry with feedback"}
+        {loading ? "Retrying…" : retryReason.trim() ? "Retry with feedback" : "Retry"}
+      </button>
+    </div>
+  );
+}
+
+function ClarifyPanel({
+  title,
+  description,
+  issues,
+  suggestedFiles,
+  targetPaths,
+  setTargetPaths,
+  allowNewFiles,
+  setAllowNewFiles,
+  notes,
+  setNotes,
+  loading,
+  onConfirm,
+}) {
+  return (
+    <div className="rounded-xl border border-orange-500/40 bg-orange-950/30 p-5 space-y-3">
+      <p className="text-orange-200 font-medium">{title}</p>
+      <p className="text-xs text-orange-200/70">{description}</p>
+      {issues?.length > 0 && (
+        <ul className="text-xs text-orange-100/80 list-disc pl-4 space-y-1">
+          {issues.map((issue, i) => (
+            <li key={i}>{issue}</li>
+          ))}
+        </ul>
+      )}
+      {suggestedFiles?.length > 0 && (
+        <p className="text-xs text-slate-400">
+          Suggested: {suggestedFiles.join(", ")}
+        </p>
+      )}
+      <label className="block text-xs text-slate-300">
+        Files to edit (repo-relative paths, one per line)
+        <textarea
+          value={targetPaths}
+          onChange={(e) => setTargetPaths(e.target.value)}
+          rows={3}
+          placeholder="components/Common/NewHeader/NewHeader.js"
+          className="mt-1 w-full rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm font-mono"
+        />
+      </label>
+      <label className="flex items-center gap-2 text-xs text-slate-300">
+        <input
+          type="checkbox"
+          checked={allowNewFiles}
+          onChange={(e) => setAllowNewFiles(e.target.checked)}
+          className="rounded"
+        />
+        Allow creating new files (only if no existing file fits)
+      </label>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Optional notes for the agents…"
+        rows={2}
+        className="w-full rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm"
+      />
+      <button
+        onClick={onConfirm}
+        disabled={loading || !targetPaths.trim()}
+        className="rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-4 py-2 text-sm font-medium"
+      >
+        Confirm & continue
       </button>
     </div>
   );
@@ -180,10 +247,29 @@ export default function PipelineDetail({
 }) {
   const [feedback, setFeedback] = useState("");
   const [retryReason, setRetryReason] = useState("");
+  const [targetPaths, setTargetPaths] = useState("");
+  const [allowNewFiles, setAllowNewFiles] = useState(false);
+  const [clarifyNotes, setClarifyNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (
+      pipeline.status === "awaiting_target_clarification" ||
+      pipeline.status === "awaiting_code_clarification"
+    ) {
+      const paths = [
+        ...(pipeline.knowledge_context?.edit_targets || [])
+          .filter((t) => t.exists !== false)
+          .map((t) => t.path),
+        ...(pipeline.knowledge_context?.matched_files || []).map((f) => f.path),
+      ];
+      const unique = [...new Set(paths.filter(Boolean))];
+      if (unique.length) setTargetPaths(unique.join("\n"));
+    }
+  }, [pipeline.status, pipeline.id, pipeline.knowledge_context]);
 
   async function handleDelete() {
     const label = `${pipeline.jira_task?.key} — ${pipeline.jira_task?.summary}`;
@@ -215,7 +301,6 @@ export default function PipelineDetail({
 
   async function handleRetry() {
     const reason = retryReason.trim();
-    if (!reason) return;
 
     setRetrying(true);
     setError(null);
@@ -232,16 +317,27 @@ export default function PipelineDetail({
 
   const awaitingGate1 = pipeline.status === "awaiting_gate_1";
   const awaitingGate2 = pipeline.status === "awaiting_gate_2";
+  const awaitingTargetClarify = pipeline.status === "awaiting_target_clarification";
+  const awaitingCodeClarify = pipeline.status === "awaiting_code_clarification";
   const showRetry = canRetryPipeline(pipeline.status);
   const busy = loading || retrying;
   const isRunning = ["phase_1_running", "phase_2_running"].includes(pipeline.status);
 
-  const runningLabel =
-    pipeline.current_agent === "A4-A6"
-      ? "A4–A6 generating code (Ollama — may take several minutes on CPU)…"
-      : pipeline.current_agent
-        ? `${pipeline.current_agent} running via Ollama…`
-        : "Agents running…";
+  const runningLabel = (() => {
+    const active = pipeline.active_agents || [];
+    if (active.length > 1) {
+      return `${active.join(", ")} generating code (Ollama — may take several minutes on CPU)…`;
+    }
+    if (active.length === 1) {
+      return `${active[0]} running via Ollama…`;
+    }
+    if (pipeline.current_agent === "A4-A6") {
+      return "A4–A6 generating code (Ollama — may take several minutes on CPU)…";
+    }
+    return pipeline.current_agent
+      ? `${pipeline.current_agent} running via Ollama…`
+      : "Agents running…";
+  })();
   const showGeneratedCode = Boolean(pipeline.frontend_code);
   const showPostGate2 =
     pipeline.status === "awaiting_gate_2" ||
@@ -316,7 +412,7 @@ export default function PipelineDetail({
                   {new Date(entry.at).toLocaleString()}
                 </span>
                 <span className="text-violet-300 ml-2">({entry.phase})</span>
-                <p className="text-slate-300 mt-0.5">{entry.reason}</p>
+                <p className="text-slate-300 mt-0.5">{entry.reason || "(no comment)"}</p>
               </li>
             ))}
           </ul>
@@ -357,10 +453,67 @@ export default function PipelineDetail({
         </Section>
       )}
 
+      {awaitingTargetClarify && (
+        <ClarifyPanel
+          title="❓ Confirm files to edit"
+          description="The agents could not confidently match existing repo files for this Jira task. Specify which files should be edited before planning continues."
+          issues={pipeline.knowledge_context?.clarification_issues}
+          suggestedFiles={(pipeline.knowledge_context?.edit_targets || []).map((t) => t.path)}
+          targetPaths={targetPaths}
+          setTargetPaths={setTargetPaths}
+          allowNewFiles={allowNewFiles}
+          setAllowNewFiles={setAllowNewFiles}
+          notes={clarifyNotes}
+          setNotes={setClarifyNotes}
+          loading={busy}
+          onConfirm={() =>
+            runGate(() =>
+              api.confirmTargets(pipeline.id, {
+                confirmed_targets: targetPaths,
+                allow_new_files: allowNewFiles,
+                notes: clarifyNotes || undefined,
+              }),
+            )
+          }
+        />
+      )}
+
+      {awaitingCodeClarify && (
+        <ClarifyPanel
+          title="❓ Confirm code write"
+          description="Generated code tried to create or modify files outside the confirmed targets. Confirm allowed paths or enable new file creation."
+          issues={(pipeline.code_write_blocked || []).map(
+            (b) => `${b.path}: ${b.reason}`,
+          )}
+          suggestedFiles={(pipeline.knowledge_context?.edit_targets || []).map((t) => t.path)}
+          targetPaths={targetPaths}
+          setTargetPaths={setTargetPaths}
+          allowNewFiles={allowNewFiles}
+          setAllowNewFiles={setAllowNewFiles}
+          notes={clarifyNotes}
+          setNotes={setClarifyNotes}
+          loading={busy}
+          onConfirm={() =>
+            runGate(() =>
+              api.confirmCodeWrite(pipeline.id, {
+                confirmed_targets: targetPaths,
+                allow_new_files: allowNewFiles,
+                notes: clarifyNotes || undefined,
+              }),
+            )
+          }
+        />
+      )}
+
       {awaitingGate1 && (
         <GatePanel
           title="🛑 Gate 1 — Review Spec & Test Plan"
-          description="Approve to start Phase 2: A4/A5/A6 code generation, then A7 code review (ESLint/syntax), A8 test execution, and A9 report — then Gate 2 for your sign-off."
+          description={`Approve to start Phase 2. Edit targets: ${
+            (pipeline.knowledge_context?.edit_targets || [])
+              .filter((t) => t.exists !== false)
+              .map((t) => t.path)
+              .join(", ") || "(none confirmed yet)"
+          }`}
           feedback={feedback}
           setFeedback={setFeedback}
           loading={busy}

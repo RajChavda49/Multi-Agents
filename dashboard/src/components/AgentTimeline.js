@@ -12,25 +12,30 @@ const AGENTS = [
   { id: "GATE_2", name: "Gate 2" },
 ];
 
+function runningAgents(pipeline) {
+  if (pipeline.active_agents?.length) return pipeline.active_agents;
+  if (pipeline.current_agent === "A4-A6") return ["A4", "A5", "A6"];
+  return pipeline.current_agent ? [pipeline.current_agent] : [];
+}
+
 function agentState(pipeline, agentId) {
   const logs = pipeline.agent_logs || [];
   const log = logs.find((l) => l.agent === agentId);
-  const current = pipeline.current_agent;
+  const active = runningAgents(pipeline);
   const status = pipeline.status;
 
   if (log?.status === "completed" || log?.status === "approved") return "done";
   if (log?.status === "rejected" || log?.status === "failed") return "rejected";
-  if (current === agentId || (agentId === "A4" && current === "A4-A6")) return "active";
-  if (["A4", "A5", "A6"].includes(agentId) && current === "A4-A6") return "active";
+  if (active.includes(agentId)) return "active";
   if (
     status === "phase_1_running" &&
     agentId === "A1" &&
     !log &&
-    (!current || current === "A1")
+    (active.includes("A1") || !pipeline.current_agent || pipeline.current_agent === "A1")
   ) {
     return "active";
   }
-  if (status === "phase_2_running" && ["A7", "A8", "A9"].includes(agentId) && current === agentId) {
+  if (status === "phase_2_running" && ["A7", "A8", "A9"].includes(agentId) && active.includes(agentId)) {
     return "active";
   }
   if (status === "awaiting_gate_1" && agentId === "GATE_1") return "waiting";
@@ -54,6 +59,11 @@ function furthestAgentIndex(pipeline) {
   }
   if (pipeline.status === "phase_2_complete") return order.indexOf("GATE_2");
   if (pipeline.status === "awaiting_gate_2") return order.indexOf("GATE_2");
+  const active = runningAgents(pipeline);
+  if (active.length) {
+    const indices = active.map((id) => order.indexOf(id)).filter((i) => i >= 0);
+    if (indices.length) return Math.max(...indices);
+  }
   if (pipeline.current_agent) {
     const idx = order.indexOf(pipeline.current_agent);
     if (idx >= 0) return idx;

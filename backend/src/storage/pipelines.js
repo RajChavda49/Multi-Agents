@@ -91,6 +91,7 @@ export function toSummary(pipeline) {
     phase: pipeline.phase,
     status,
     current_agent: pipeline.current_agent,
+    active_agents: pipeline.active_agents || [],
     gate_1_approved: pipeline.gate_1_approved,
     gate_2_approved: pipeline.gate_2_approved,
     created_at: pipeline.created_at,

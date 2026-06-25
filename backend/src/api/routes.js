@@ -17,6 +17,8 @@ import {
   rejectGate1,
   approveGate2,
   rejectGate2,
+  confirmTargets,
+  confirmCodeWrite,
   parseJiraWebhook,
   removePipelineById,
   retryPipeline,
@@ -118,6 +120,24 @@ router.post("/pipelines/:id/reject", async (req, res) => {
   try {
     const { feedback } = GateDecisionSchema.parse(req.body || {});
     const pipeline = await rejectGate1(req.params.id, feedback || "Rejected");
+    res.json({ pipeline });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/pipelines/:id/confirm-targets", async (req, res) => {
+  try {
+    const pipeline = await confirmTargets(req.params.id, req.body || {});
+    res.json({ pipeline });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post("/pipelines/:id/confirm-code-write", async (req, res) => {
+  try {
+    const pipeline = await confirmCodeWrite(req.params.id, req.body || {});
     res.json({ pipeline });
   } catch (err) {
     res.status(400).json({ error: err.message });

@@ -5,6 +5,8 @@ import {
   retryDevelopmentPhase,
   resumeGate1,
   resumeGate2,
+  resumeTargetClarify,
+  resumeCodeWriteClarify,
   getGraphState,
   resolveStatus,
 } from "../orchestrator/graph.js";
@@ -56,8 +58,15 @@ const GateDecisionSchema = z.object({
   feedback: z.string().optional(),
 });
 
+const TargetClarifySchema = z.object({
+  confirmed_targets: z.union([z.array(z.string()), z.string()]).optional(),
+  target_files: z.union([z.array(z.string()), z.string()]).optional(),
+  allow_new_files: z.boolean().optional().default(false),
+  notes: z.string().optional(),
+});
+
 const RetrySchema = z.object({
-  reason: z.string().min(1, "Retry reason is required"),
+  reason: z.string().optional().default(""),
   phase: z.enum(["auto", "planning", "development"]).optional().default("auto"),
 });
 
@@ -180,7 +189,7 @@ async function executePlanningPhase(pipelineId, base) {
       try {
         await addComment(
           base.jira_task.key,
-          `SDLC Agents: Phase 1 planning complete. Status: ${merged.status}. Awaiting Gate 1 review.`,
+          `SDLC Agents: Phase 1 ${merged.status === "awaiting_target_clarification" ? "paused — confirm which files to edit" : "planning complete"}. Status: ${merged.status}.`,
         );
       } catch {
         // non-blocking
@@ -349,6 +358,72 @@ export async function rejectGate1(pipelineId, feedback = "Rejected by reviewer")
   }
 
   return merged;
+}
+
+export async function confirmTargets(pipelineId, input = {}) {
+  const existing = getPipeline(pipelineId);
+  if (!existing) {
+    throw new Error(`Pipeline not found: ${pipelineId}`);
+  }
+  const status = normalizeStatus(existing.status, existing.phase);
+  if (status !== "awaiting_target_clarification") {
+    throw new Error(`Pipeline is not awaiting target clarification (status: ${status})`);
+  }
+
+  const decision = TargetClarifySchema.parse(input);
+  const targets = decision.confirmed_targets || decision.target_files;
+  if (!targets || (Array.isArray(targets) && !targets.length)) {
+    throw new Error("confirmed_targets is required — provide repo-relative file paths to edit");
+  }
+
+  startPipelineRun(pipelineId);
+  try {
+    const result = await resumeTargetClarify(existing.graph_thread_id || pipelineId, decision);
+    if (!getPipeline(pipelineId)) {
+      return { id: pipelineId, deleted: true };
+    }
+    const merged = await mergeGraphResult(pipelineId, existing, result);
+    savePipeline(merged);
+    return merged;
+  } catch (err) {
+    if (isPipelineCancelledError(err)) {
+      return { id: pipelineId, deleted: true };
+    }
+    throw err;
+  } finally {
+    stopPipelineRun(pipelineId);
+  }
+}
+
+export async function confirmCodeWrite(pipelineId, input = {}) {
+  const existing = getPipeline(pipelineId);
+  if (!existing) {
+    throw new Error(`Pipeline not found: ${pipelineId}`);
+  }
+  const status = normalizeStatus(existing.status, existing.phase);
+  if (status !== "awaiting_code_clarification") {
+    throw new Error(`Pipeline is not awaiting code write clarification (status: ${status})`);
+  }
+
+  const decision = TargetClarifySchema.parse(input);
+
+  startPipelineRun(pipelineId);
+  try {
+    const result = await resumeCodeWriteClarify(existing.graph_thread_id || pipelineId, decision);
+    if (!getPipeline(pipelineId)) {
+      return { id: pipelineId, deleted: true };
+    }
+    const merged = await mergeGraphResult(pipelineId, existing, result);
+    savePipeline(merged);
+    return merged;
+  } catch (err) {
+    if (isPipelineCancelledError(err)) {
+      return { id: pipelineId, deleted: true };
+    }
+    throw err;
+  } finally {
+    stopPipelineRun(pipelineId);
+  }
 }
 
 export async function approveGate2(pipelineId, feedback = null) {
@@ -571,7 +646,7 @@ export async function retryPipeline(pipelineId, input) {
         try {
           await addComment(
             existing.jira_task.key,
-            `SDLC Agents: Pipeline RETRY (${targetPhase}). Reason: ${reason}`,
+            `SDLC Agents: Pipeline RETRY (${targetPhase}).${reason ? ` Reason: ${reason}` : ""}`,
           );
         } catch {
           // non-blocking
@@ -632,4 +707,4 @@ export function removePipelineById(pipelineId) {
   };
 }
 
-export { CreatePipelineSchema, GateDecisionSchema, RetrySchema };
+export { CreatePipelineSchema, GateDecisionSchema, RetrySchema, TargetClarifySchema };

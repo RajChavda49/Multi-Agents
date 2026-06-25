@@ -64,9 +64,13 @@ export default function PipelineList({ pipelines, selectedId, onSelect, onDelete
             </div>
           </div>
           <p className="text-sm text-slate-200 truncate">{p.summary}</p>
-          {["phase_1_running", "phase_2_running"].includes(p.status) && p.current_agent && (
+          {["phase_1_running", "phase_2_running"].includes(p.status) &&
+            (p.active_agents?.length || p.current_agent) && (
             <p className="text-xs text-blue-300 mt-1">
-              {p.current_agent === "A4-A6" ? "A4–A6" : p.current_agent} via Ollama…
+              {(p.active_agents?.length > 1
+                ? p.active_agents.join(", ")
+                : p.active_agents?.[0] || (p.current_agent === "A4-A6" ? "A4–A6" : p.current_agent))}{" "}
+              via Ollama…
             </p>
           )}
           {p.status === "failed" && p.error && (

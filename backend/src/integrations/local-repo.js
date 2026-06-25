@@ -7,6 +7,7 @@ import {
   getCombinedRepoStatus,
 } from "./repo-target.js";
 import { captureFileSnapshot } from "./repo-revert.js";
+import { normalizeUiArea } from "./repo-task-intent.js";
 
 const IGNORE_DIRS = new Set([
   "node_modules",
@@ -19,6 +20,72 @@ const IGNORE_DIRS = new Set([
   "vendor",
   "__pycache__",
 ]);
+
+const STOP_WORDS = new Set([
+  "section",
+  "update",
+  "text",
+  "replace",
+  "string",
+  "existing",
+  "specifically",
+  "personalize",
+  "branding",
+  "change",
+  "target",
+  "acceptance",
+  "criteria",
+  "correctly",
+  "rendered",
+  "layout",
+  "distortion",
+  "overflow",
+  "designated",
+  "styling",
+  "matches",
+  "original",
+  "design",
+  "requirements",
+  "successfully",
+  "removed",
+  "social",
+  "media",
+  "content",
+  "personalized",
+  "minimal",
+  "localized",
+  "single",
+  "task",
+  "what",
+  "with",
+  "from",
+  "that",
+  "this",
+  "will",
+  "must",
+  "should",
+  "does",
+  "cause",
+  "place",
+  "into",
+  "their",
+  "doesn",
+]);
+
+const TASK_AREA_HINTS = [
+  "footer",
+  "header",
+  "navbar",
+  "sidebar",
+  "cart",
+  "checkout",
+  "modal",
+  "banner",
+  "hero",
+  "coupon",
+  "login",
+  "home",
+];
 
 const KEY_FILES = [
   "package.json",
@@ -115,32 +182,184 @@ function keywordTokens(text) {
   return (text || "")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((w) => w.length > 3)
+    .filter((w) => w.length > 3 && !STOP_WORDS.has(w))
     .slice(0, 12);
 }
 
-function findRelevantFiles(task, tree, extraText = "") {
+function extractAreaTokens(text) {
+  const lower = (text || "").toLowerCase();
+  return TASK_AREA_HINTS.filter((hint) => lower.includes(hint));
+}
+
+function pathMatchesArea(relPath, areaTokens) {
+  if (!areaTokens.length) return true;
+  const lower = relPath.toLowerCase();
+  return areaTokens.some((t) => lower.includes(t));
+}
+
+function isHeaderArea(intent) {
+  return normalizeUiArea(intent?.ui_area) === "site_header";
+}
+
+function isFooterArea(intent) {
+  return normalizeUiArea(intent?.ui_area) === "site_footer";
+}
+
+function pathBlockedByIntent(relPath, intent) {
+  if (!intent) return false;
+  const lower = relPath.toLowerCase();
+  for (const ex of intent.exclude_path_hints || []) {
+    if (ex && lower.includes(String(ex).toLowerCase())) return true;
+  }
+  if (isFooterArea(intent) && /newheader|\/header\//.test(lower) && !/footer/.test(lower)) {
+    return true;
+  }
+  if (isHeaderArea(intent) && /footerlinks|newfooter|\/footer\//.test(lower) && !/header/.test(lower)) {
+    return true;
+  }
+  return false;
+}
+
+function scorePathByIntent(relPath, intent) {
+  if (!intent || pathBlockedByIntent(relPath, intent)) return -1;
+
+  const lower = relPath.toLowerCase();
+  let score = 0;
+
+  for (const hint of intent.include_path_hints || []) {
+    const h = String(hint).toLowerCase();
+    const segments = lower.split("/");
+    if (segments.some((seg) => seg === h || seg.includes(h))) score += 5;
+    const base = path.basename(relPath, path.extname(relPath)).toLowerCase();
+    if (base === h) score += 8;
+  }
+
+  const parts = lower.split("/");
+  const baseName = path.basename(relPath, path.extname(relPath)).toLowerCase();
+  const parentDir = parts[parts.length - 2];
+  const pathRelevant =
+    (intent.include_path_hints || []).some((h) => lower.includes(String(h).toLowerCase())) ||
+    (isHeaderArea(intent) && /header/.test(lower)) ||
+    (isFooterArea(intent) && /footer/.test(lower));
+  if (parentDir && baseName === parentDir && pathRelevant) score += 10;
+  if (parts.length > 5) score -= (parts.length - 5) * 2;
+
+  if (isHeaderArea(intent)) {
+    if (/newheader\/newheader\.(js|jsx|tsx)$/.test(lower)) score += 15;
+    if (/common\/header\/header\.(js|jsx|tsx)$/.test(lower)) score += 4;
+    if (/^src\/components\//.test(lower)) score -= 10;
+    if (/\/algolia\/|skeleton|cart|checkout|seoheader|styled/.test(lower)) score -= 12;
+  } else if (isFooterArea(intent)) {
+    if (/footerlinks|newfooter|common\/footer/.test(lower)) score += 6;
+    if (/cart|checkout|email/.test(lower)) score -= 8;
+  }
+
+  if (/\.(js|jsx|ts|tsx|vue)$/.test(lower)) score += 1;
+  return score;
+}
+
+function findRelevantFilesByIntent(repoPath, intent) {
+  if (!intent) return [];
+
+  const hints = [
+    ...(intent.include_path_hints || []),
+    ...(intent.relevant_module_hints || []),
+  ].filter(Boolean);
+
+  const hits = [];
+  const seen = new Set();
+
+  function shouldFollowDir(rel, depth) {
+    const lower = rel.toLowerCase().replace(/\/$/, "");
+    const name = lower.split("/").pop();
+
+    if (depth === 0) {
+      return ["components", "src", "app", "pages", "lib"].includes(name);
+    }
+    if (hints.some((h) => lower.includes(String(h).toLowerCase()))) return true;
+    if (isHeaderArea(intent) && /header/.test(lower)) return true;
+    if (isFooterArea(intent) && /footer/.test(lower)) return true;
+    if (/^components\/[^/]+$/.test(lower)) return true;
+    return false;
+  }
+
+  function walk(dir, prefix = "", depth = 0) {
+    if (depth > 6 || hits.length >= 16) return;
+
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (IGNORE_DIRS.has(entry.name)) continue;
+
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const full = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (shouldFollowDir(rel, depth)) walk(full, rel, depth + 1);
+        continue;
+      }
+
+      if (!/\.(js|jsx|ts|tsx|vue)$/i.test(entry.name)) continue;
+
+      const score = scorePathByIntent(rel, intent);
+      if (score < 3 || seen.has(rel)) continue;
+
+      seen.add(rel);
+      hits.push({
+        path: rel,
+        snippet: readFileSafe(rel, 1500),
+        match_type: "intent",
+        score,
+      });
+    }
+  }
+
+  walk(repoPath);
+  return hits.sort((a, b) => b.score - a.score).slice(0, 6);
+}
+
+function findRelevantFiles(task, tree, extraText = "", intent = null) {
   const tokens = keywordTokens(`${task.summary} ${task.description} ${extraText}`);
+  const areaTokens = extractAreaTokens(`${task.summary} ${task.description} ${extraText}`);
   const files = tree.filter((e) => e.type === "file");
   const scored = files
     .map((f) => {
+      if (pathBlockedByIntent(f.path, intent)) return { ...f, score: -1 };
+
       const lower = f.path.toLowerCase();
       let score = 0;
       for (const t of tokens) {
         if (lower.includes(t)) score += 2;
       }
+      for (const area of areaTokens) {
+        if (lower.includes(area)) score += 3;
+      }
       if (/\.(js|jsx|ts|tsx|vue)$/.test(lower)) score += 1;
-      if (lower.includes("component") || lower.includes("page") || lower.includes("api")) score += 1;
       return { ...f, score };
     })
-    .filter((f) => f.score > 0)
+    .filter((f) => f.score >= 4 && pathMatchesArea(f.path, areaTokens))
     .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
+    .slice(0, 6);
 
   return scored.map((f) => ({
     path: f.path,
     snippet: readFileSafe(f.path, 1500),
+    match_type: "keyword",
   }));
+}
+
+function dirsFromMatches(matches, intent) {
+  const dirs = new Set(intent?.relevant_module_hints || []);
+  for (const m of matches) {
+    const parts = m.path.split("/");
+    if (parts.length > 1) dirs.add(parts.slice(0, -1).join("/"));
+  }
+  return [...dirs].slice(0, 12);
 }
 
 /** Find files whose contents contain a literal phrase (for retry / user hints). */
@@ -193,13 +412,42 @@ function findFilesByContentPhrase(repoPath, phrase, maxResults = 12) {
 
 function extractSearchPhrases(extraText) {
   if (!extraText) return [];
+
   const quoted = [...extraText.matchAll(/"([^"]{4,})"|'([^']{4,})'/g)].map((m) => m[1] || m[2]);
-  if (quoted.length) return quoted;
-  if (extraText.length >= 8) return [extraText.slice(0, 120)];
-  return [];
+
+  const replaceMatch = extraText.match(
+    /replace[^"']*["']([^"']{4,})["'][^"']*with[^"']*["']([^"']+)["']/i,
+  );
+  if (replaceMatch) {
+    const source = replaceMatch[1];
+    const rest = quoted.filter((q) => q !== replaceMatch[2]);
+    return [source, ...rest.filter((q) => q !== source)];
+  }
+
+  return [...new Set(quoted)].sort((a, b) => b.length - a.length);
 }
 
-export function gatherKnowledgeContext(jiraTask, retryFeedback = "") {
+function searchContentPhrases(repoPath, phrases, maxResults = 8) {
+  const hits = [];
+  const seen = new Set();
+
+  for (const phrase of phrases) {
+    if (!phrase || phrase.length < 6) continue;
+
+    for (const hit of findFilesByContentPhrase(repoPath, phrase, maxResults)) {
+      if (seen.has(hit.path)) continue;
+      seen.add(hit.path);
+      hits.push({ ...hit, search_phrase: phrase });
+    }
+
+    // Stop after the first phrase that finds real hits (usually the string being replaced)
+    if (hits.length > 0) break;
+  }
+
+  return hits;
+}
+
+export function gatherKnowledgeContext(jiraTask, retryFeedback = "", intent = null) {
   const repoPath = getTargetRepoPath();
   if (!repoPath || !fs.existsSync(repoPath)) {
     const status = getCombinedRepoStatus();
@@ -218,26 +466,37 @@ export function gatherKnowledgeContext(jiraTask, retryFeedback = "") {
   const pkg = readPackageJson(repoPath);
   const stack = detectStack(pkg);
   const tree = walkRepo(repoPath);
-  const matched = findRelevantFiles(jiraTask, tree, retryFeedback);
+  const intentMatches = findRelevantFilesByIntent(repoPath, intent);
+  const matched = findRelevantFiles(jiraTask, tree, retryFeedback, intent);
+  const areaTokens = extractAreaTokens(
+    `${jiraTask.summary} ${jiraTask.description} ${retryFeedback}`,
+  );
 
-  const contentMatches = [];
   const phrases = [
+    ...(intent?.content_search_phrases || []),
     ...extractSearchPhrases(jiraTask.description || ""),
     ...extractSearchPhrases(jiraTask.summary || ""),
     ...extractSearchPhrases(retryFeedback),
   ];
-  for (const phrase of phrases) {
-    for (const hit of findFilesByContentPhrase(repoPath, phrase)) {
-      if (!contentMatches.some((h) => h.path === hit.path)) {
-        contentMatches.push(hit);
-      }
-    }
-  }
 
-  const mergedMatches = [
-    ...contentMatches,
-    ...matched.filter((m) => !contentMatches.some((c) => c.path === m.path)),
-  ].slice(0, 12);
+  const contentMatches = searchContentPhrases(repoPath, [...new Set(phrases)]).filter(
+    (m) => !pathBlockedByIntent(m.path, intent),
+  );
+
+  const seen = new Set(contentMatches.map((m) => m.path));
+  const intentAdds = intentMatches.filter((m) => !seen.has(m.path));
+  intentAdds.forEach((m) => seen.add(m.path));
+
+  const keywordAdds = matched.filter((m) => {
+    if (seen.has(m.path)) return false;
+    if (pathBlockedByIntent(m.path, intent)) return false;
+    if (contentMatches.length > 0 || intentAdds.length > 0) {
+      return pathMatchesArea(m.path, areaTokens);
+    }
+    return true;
+  });
+
+  const mergedMatches = [...contentMatches, ...intentAdds, ...keywordAdds].slice(0, 8);
   const keyFileContents = {};
 
   for (const name of KEY_FILES) {
@@ -245,10 +504,15 @@ export function gatherKnowledgeContext(jiraTask, retryFeedback = "") {
     if (content) keyFileContents[name] = content;
   }
 
+  const moduleDirs = dirsFromMatches(mergedMatches, intent);
   const srcDirs = tree
     .filter((e) => e.type === "dir" && /^src\/|app\/|pages\/|components\//.test(e.path))
     .map((e) => e.path)
     .slice(0, 15);
+
+  const intentNote = intent?.intent_summary
+    ? ` Intent: ${intent.intent_summary.slice(0, 120)}.`
+    : "";
 
   return {
     summary: `Codebase: ${pkg?.name || path.basename(repoPath)} (${stack.join(", ")})`,
@@ -256,7 +520,12 @@ export function gatherKnowledgeContext(jiraTask, retryFeedback = "") {
     repo_path: repoPath,
     project_name: pkg?.name || path.basename(repoPath),
     stack,
-    relevant_modules: srcDirs.length ? srcDirs : tree.filter((e) => e.type === "dir").map((e) => e.path).slice(0, 10),
+    task_intent: intent || null,
+    relevant_modules: moduleDirs.length
+      ? moduleDirs
+      : srcDirs.length
+        ? srcDirs
+        : tree.filter((e) => e.type === "dir").map((e) => e.path).slice(0, 10),
     matched_files: mergedMatches,
     key_files: Object.keys(keyFileContents),
     package_scripts: pkg?.scripts ? Object.keys(pkg.scripts) : [],
@@ -269,8 +538,8 @@ export function gatherKnowledgeContext(jiraTask, retryFeedback = "") {
     risks: ["Generated files must align with existing module boundaries"],
     documentation_refs: Object.keys(keyFileContents).filter((k) => k.toLowerCase().includes("readme") || k.includes("architecture")),
     codebase_notes: retryFeedback
-      ? `Indexed ${tree.length} paths. ${mergedMatches.length} files matched (incl. content search from retry feedback).`
-      : `Indexed ${tree.length} paths from ${repoPath}. ${matched.length} files matched Jira task keywords.`,
+      ? `Indexed ${tree.length} paths. ${mergedMatches.length} files matched (intent + content + retry).${intentNote}`
+      : `Indexed ${tree.length} paths. ${mergedMatches.length} files matched (intent-guided search).${intentNote}`,
     file_tree_sample: tree.slice(0, 40),
   };
 }
@@ -289,8 +558,11 @@ File tree sample: ${JSON.stringify(knowledge.file_tree_sample || [])}
 }
 
 export function writeFilesToTargetRepo(files, snapshotMap = {}) {
-  if (!isTargetRepoConfigured() || !isRepoWriteEnabled()) {
-    return { written: [], skipped: true, reason: "repo write disabled or not configured" };
+  if (!isTargetRepoConfigured()) {
+    return { written: [], skipped: true, reason: "TARGET_REPO_PATH not configured" };
+  }
+  if (!isRepoWriteEnabled()) {
+    return { written: [], skipped: true, reason: "TARGET_REPO_WRITE is false" };
   }
 
   const root = getTargetRepoPath();

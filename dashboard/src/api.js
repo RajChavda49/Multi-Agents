@@ -32,6 +32,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ feedback }),
     }),
+  confirmTargets: (id, body) =>
+    request(`/pipelines/${id}/confirm-targets`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  confirmCodeWrite: (id, body) =>
+    request(`/pipelines/${id}/confirm-code-write`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   approveGate2: (id, feedback) =>
     request(`/pipelines/${id}/approve-gate-2`, {
       method: "POST",

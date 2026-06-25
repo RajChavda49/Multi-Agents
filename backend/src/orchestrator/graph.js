@@ -11,6 +11,8 @@ import { runA8TestExec } from "./agents/a8-test-exec.js";
 import { runA9Report } from "./agents/a9-report.js";
 import { writeCodeFiles, listWorkspaceFiles } from "./workspace.js";
 import { ensureRepoReady } from "../integrations/repo-target.js";
+import { applyUserTargetConfirmation } from "../integrations/edit-targets.js";
+import { validateGeneratedFiles } from "../integrations/code-write-guard.js";
 import { reportAgentActivity } from "../services/pipeline-progress.js";
 import { assertPipelineActive } from "../services/pipeline-run-control.js";
 import { getPipeline } from "../storage/pipelines.js";
@@ -45,6 +47,44 @@ async function a1Node(state) {
     agent_logs: result.agent_logs,
   });
   return result;
+}
+
+async function clarifyTargetsNode(state) {
+  const knowledge = state.knowledge_context;
+  if (!knowledge?.needs_target_clarification) {
+    return {};
+  }
+
+  reportAgentActivity(state.pipeline_id, {
+    status: "awaiting_target_clarification",
+    phase: "planning",
+    current_agent: "CLARIFY",
+  });
+
+  const decision = interrupt({
+    gate: "TARGET_CLARIFY",
+    message:
+      "Could not confidently locate existing files to edit. Confirm the correct repo paths before planning continues.",
+    issues: knowledge.clarification_issues || [],
+    suggested_files: (knowledge.edit_targets || []).map((t) => t.path),
+    matched_files: (knowledge.matched_files || []).map((f) => f.path),
+    repo_path: knowledge.repo_path,
+  });
+
+  const updatedKnowledge = applyUserTargetConfirmation(knowledge, decision, state.jira_task);
+
+  return {
+    knowledge_context: updatedKnowledge,
+    agent_logs: [
+      {
+        agent: "CLARIFY",
+        name: "Target Clarification",
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        output_summary: `Confirmed ${(updatedKnowledge.edit_targets || []).filter((t) => t.exists).length} file(s) to edit`,
+      },
+    ],
+  };
 }
 
 async function a2Node(state) {
@@ -156,6 +196,7 @@ async function devParallelNode(state) {
     status: "phase_2_running",
     phase: "development",
     current_agent: "A4-A6",
+    active_agents: config.skipBackendAgent ? ["A4", "A6"] : ["A4", "A5", "A6"],
   });
 
   let repoReady = { source: "none", path: null, branch: null };
@@ -203,19 +244,60 @@ async function devParallelNode(state) {
     ...(a6.test_code?.files || []),
   ];
 
+  let filesToWrite = allFiles;
+  let knowledge = state.knowledge_context;
+  let validation = validateGeneratedFiles(filesToWrite, knowledge);
+
+  if (validation.needs_clarification) {
+    saveNodeProgress(state.pipeline_id, {
+      code_write_blocked: validation.blocked,
+      frontend_code: a4.frontend_code,
+      backend_code: a5.backend_code,
+      test_code: a6.test_code,
+    });
+
+    reportAgentActivity(state.pipeline_id, {
+      status: "awaiting_code_clarification",
+      phase: "development",
+      current_agent: "CLARIFY",
+    });
+
+    const decision = interrupt({
+      gate: "CODE_WRITE_CLARIFY",
+      message:
+        "Generated code tried to create or modify files outside the confirmed edit targets.",
+      blocked: validation.blocked,
+      proposed_files: filesToWrite.map((f) => f.path),
+      edit_targets: (knowledge.edit_targets || []).map((t) => t.path),
+    });
+
+    knowledge = applyUserTargetConfirmation(knowledge, decision, state.jira_task);
+    validation = validateGeneratedFiles(filesToWrite, knowledge);
+
+    if (!decision.allow_new_files) {
+      filesToWrite = validation.valid;
+    }
+
+    if (!filesToWrite.length) {
+      throw new Error(
+        `No files approved for write. Blocked: ${validation.blocked.map((b) => b.path).join(", ")}`,
+      );
+    }
+  }
+
   assertPipelineActive(state.pipeline_id);
   const priorSnapshots = getPipeline(state.pipeline_id)?.repo_snapshots || {};
-  const writeResult = writeCodeFiles(state.pipeline_id, allFiles, priorSnapshots);
-  const workspace_files = listWorkspaceFiles(state.pipeline_id);
+  const writeResult = writeCodeFiles(state.pipeline_id, filesToWrite, priorSnapshots);
+  const workspace_files = listWorkspaceFiles(state.pipeline_id, writeResult);
 
   saveNodeProgress(state.pipeline_id, {
-    current_agent: "A4-A6",
     frontend_code: a4.frontend_code,
     backend_code: a5.backend_code,
     test_code: a6.test_code,
     workspace_files,
     code_write_result: writeResult,
     repo_snapshots: writeResult.repo_snapshots,
+    knowledge_context: knowledge,
     agent_logs: [
       ...(a4.agent_logs || []),
       ...(a5.agent_logs || []),
@@ -226,7 +308,8 @@ async function devParallelNode(state) {
   return {
     phase: "development",
     status: "phase_2_running",
-    current_agent: "A4-A6",
+    current_agent: "A7",
+    active_agents: [],
     repo_source: repoReady.source,
     git_branch: repoReady.branch,
     repo_ready: repoReady,
@@ -241,6 +324,12 @@ async function devParallelNode(state) {
 
 async function a7Node(state) {
   assertPipelineActive(state.pipeline_id);
+  reportAgentActivity(state.pipeline_id, {
+    status: "phase_2_running",
+    phase: "development",
+    current_agent: "A7",
+    active_agents: [],
+  });
   const result = {
     ...(await runA7CodeReview(state)),
     status: "phase_2_running",
@@ -257,6 +346,11 @@ async function a7Node(state) {
 
 async function a8Node(state) {
   assertPipelineActive(state.pipeline_id);
+  reportAgentActivity(state.pipeline_id, {
+    status: "phase_2_running",
+    phase: "development",
+    current_agent: "A8",
+  });
   const result = {
     ...(await runA8TestExec(state)),
     status: "phase_2_running",
@@ -273,6 +367,11 @@ async function a8Node(state) {
 
 async function a9Node(state) {
   assertPipelineActive(state.pipeline_id);
+  reportAgentActivity(state.pipeline_id, {
+    status: "phase_2_running",
+    phase: "development",
+    current_agent: "A9",
+  });
   const result = {
     ...(await runA9Report(state)),
     status: "phase_2_running",
@@ -288,6 +387,12 @@ async function a9Node(state) {
 }
 
 async function gate2Node(state) {
+  reportAgentActivity(state.pipeline_id, {
+    status: "phase_2_running",
+    phase: "development",
+    current_agent: "GATE_2",
+  });
+
   const decision = interrupt({
     gate: "GATE_2",
     message:
@@ -329,6 +434,7 @@ async function gate2Node(state) {
 function buildGraph() {
   const graph = new StateGraph(PipelineAnnotation)
     .addNode("a1_knowledge", a1Node)
+    .addNode("clarify_targets", clarifyTargetsNode)
     .addNode("a2_dev_plan", a2Node)
     .addNode("a3_test_cases", a3Node)
     .addNode("gate_1", gate1Node)
@@ -338,7 +444,8 @@ function buildGraph() {
     .addNode("a9_report", a9Node)
     .addNode("gate_2", gate2Node)
     .addEdge(START, "a1_knowledge")
-    .addEdge("a1_knowledge", "a2_dev_plan")
+    .addEdge("a1_knowledge", "clarify_targets")
+    .addEdge("clarify_targets", "a2_dev_plan")
     .addEdge("a2_dev_plan", "a3_test_cases")
     .addEdge("a3_test_cases", "gate_1")
     .addConditionalEdges("gate_1", routeAfterGate1, ["dev_parallel", END])
@@ -374,6 +481,24 @@ async function snapshotFor(threadId) {
   return graph.getState(graphConfig(threadId));
 }
 
+export async function isAwaitingTargetClarify(threadId) {
+  const snapshot = await snapshotFor(threadId);
+  const pending = snapshot?.next?.includes("clarify_targets");
+  const hasInterrupt = snapshot?.tasks?.some(
+    (task) => task.name === "clarify_targets" && task.interrupts?.length > 0,
+  );
+  return pending || hasInterrupt;
+}
+
+export async function isAwaitingCodeWriteClarify(threadId) {
+  const snapshot = await snapshotFor(threadId);
+  const pending = snapshot?.next?.includes("dev_parallel");
+  const hasInterrupt = snapshot?.tasks?.some(
+    (task) => task.name === "dev_parallel" && task.interrupts?.length > 0,
+  );
+  return pending || hasInterrupt;
+}
+
 export async function isAwaitingGate1(threadId) {
   const snapshot = await snapshotFor(threadId);
   const pendingGate = snapshot?.next?.includes("gate_1");
@@ -393,6 +518,8 @@ export async function isAwaitingGate2(pipelineId) {
 }
 
 export async function resolveStatus(pipelineId, result) {
+  if (await isAwaitingTargetClarify(pipelineId)) return "awaiting_target_clarification";
+  if (await isAwaitingCodeWriteClarify(pipelineId)) return "awaiting_code_clarification";
   if (await isAwaitingGate1(pipelineId)) return "awaiting_gate_1";
   if (await isAwaitingGate2(pipelineId)) return "awaiting_gate_2";
   if (result?.gate_2_approved === true || result?.status === "phase_2_complete") {
@@ -425,7 +552,13 @@ export async function runPlanningPhase(initialState) {
   );
 
   const status = await resolveStatus(threadId, result);
-  return { ...result, status, current_agent: status === "awaiting_gate_1" ? "GATE_1" : result.current_agent };
+  const current_agent =
+    status === "awaiting_target_clarification" || status === "awaiting_code_clarification"
+      ? "CLARIFY"
+      : status === "awaiting_gate_1"
+        ? "GATE_1"
+        : result.current_agent;
+  return { ...result, status, current_agent };
 }
 
 export async function retryDevelopmentPhase(pipeline) {
@@ -509,6 +642,38 @@ export async function resumeGate2(threadId, { approved, feedback = null }) {
         ? "GATE_2"
         : result.current_agent;
 
+  return { ...result, status, current_agent };
+}
+
+export async function resumeTargetClarify(threadId, decision) {
+  const graph = getGraph();
+  const config = graphConfig(threadId);
+  const { Command } = await import("@langchain/langgraph");
+
+  const result = await graph.invoke(new Command({ resume: decision }), config);
+  const status = await resolveStatus(threadId, result);
+  const current_agent =
+    status === "awaiting_target_clarification" || status === "awaiting_code_clarification"
+      ? "CLARIFY"
+      : status === "awaiting_gate_1"
+        ? "GATE_1"
+        : result.current_agent;
+  return { ...result, status, current_agent };
+}
+
+export async function resumeCodeWriteClarify(threadId, decision) {
+  const graph = getGraph();
+  const config = graphConfig(threadId);
+  const { Command } = await import("@langchain/langgraph");
+
+  const result = await graph.invoke(new Command({ resume: decision }), config);
+  const status = await resolveStatus(threadId, result);
+  const current_agent =
+    status === "awaiting_gate_2"
+      ? "GATE_2"
+      : status === "awaiting_code_clarification"
+        ? "CLARIFY"
+        : result.current_agent;
   return { ...result, status, current_agent };
 }
 

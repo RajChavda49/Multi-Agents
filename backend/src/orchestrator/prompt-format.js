@@ -1,5 +1,7 @@
 /** Shared Jira + repo formatting for LLM prompts (all agents use LLM). */
 
+import { formatEditTargetsForPrompt } from "../integrations/edit-targets.js";
+
 export function formatJiraTask(task) {
   const desc = (task.description || "").trim();
   const ac = extractAcceptanceCriteria(desc);
@@ -36,15 +38,17 @@ function extractAcceptanceCriteria(description) {
   return bullets.slice(0, 10);
 }
 
-/** Best files first: content matches, then keyword matches — with short snippets. */
+/** Best files first: content matches, then intent, then keyword — with short snippets. */
 export function formatRepoScanForLlm(repoContext) {
   if (!repoContext?.repo_connected) {
     return "=== REPO ===\nNot connected — plan from Jira description only.";
   }
 
-  const content = (repoContext.matched_files || []).filter((f) => f.match_type === "content");
-  const keyword = (repoContext.matched_files || []).filter((f) => f.match_type !== "content");
-  const ordered = [...content, ...keyword].slice(0, 6);
+  const intent = repoContext.task_intent;
+  const order = { content: 0, intent: 1, keyword: 2 };
+  const ordered = [...(repoContext.matched_files || [])]
+    .sort((a, b) => (order[a.match_type] ?? 3) - (order[b.match_type] ?? 3))
+    .slice(0, 6);
 
   const files = ordered.map((f) => ({
     path: f.path,
@@ -52,17 +56,42 @@ export function formatRepoScanForLlm(repoContext) {
     snippet: (f.snippet || "").slice(0, 220).replace(/\s+/g, " ").trim(),
   }));
 
-  return `=== REPO SCAN ===
+  let block = `=== REPO SCAN ===
 Project: ${repoContext.project_name || "unknown"} | Stack: ${(repoContext.stack || []).join(", ")}
-Path: ${repoContext.repo_path}
+Path: ${repoContext.repo_path}`;
+
+  if (intent?.intent_summary) {
+    block += `
+
+Task intent (read ticket first):
+${intent.intent_summary}
+UI area: ${intent.ui_area || "unknown"}`;
+  }
+
+  block += `
 
 Likely files to edit:
 ${files.length ? JSON.stringify(files, null, 2) : "(no matches — infer from description)"}
 
+Relevant module folders: ${JSON.stringify((repoContext.relevant_modules || []).slice(0, 6))}
+
 Notes: ${(repoContext.codebase_notes || "").slice(0, 300)}`;
+
+  return block;
+}
+
+export function formatJiraBlockCompact(task) {
+  const t = formatJiraTask(task);
+  const ac = t.acceptance_criteria.slice(0, 3);
+  let block = `${t.key}: ${t.summary}`;
+  if (ac.length) block += `\nAccept: ${ac.join(" | ")}`;
+  const quoted = [...(t.description || "").matchAll(/"([^"]{3,80})"/g)].map((m) => m[1]);
+  if (quoted.length) block += `\nCopy: ${quoted.map((q) => `"${q}"`).join(", ")}`;
+  return block;
 }
 
 export function formatKnowledgeForA2(knowledge) {
+  const editBlock = formatEditTargetsForPrompt(knowledge, { includeContent: false, maxFiles: 4 });
   return {
     summary: knowledge.summary,
     change_scope: knowledge.change_scope,
@@ -70,9 +99,12 @@ export function formatKnowledgeForA2(knowledge) {
     backend_needed: knowledge.backend_needed,
     backend_reason: knowledge.backend_reason,
     stack: knowledge.stack,
-    target_files: (knowledge.matched_files || [])
+    target_confidence: knowledge.target_confidence,
+    files_to_edit: editBlock.files_to_change,
+    edit_rule: editBlock.rule,
+    target_files: (knowledge.edit_targets || knowledge.matched_files || [])
       .slice(0, 5)
-      .map((f) => ({ path: f.path, match: f.match_type || "keyword" })),
+      .map((f) => ({ path: f.path, exists: f.exists !== false, match: f.match_type || f.source })),
     constraints: (knowledge.constraints || []).slice(0, 4),
     risks: (knowledge.risks || []).slice(0, 3),
   };
@@ -90,18 +122,29 @@ export function formatSpecForA3(spec) {
   };
 }
 
-export function formatSpecForCoding(spec, knowledge) {
-  return {
+export function formatSpecForCoding(spec, knowledge, options = {}) {
+  const scope = spec.change_scope || knowledge?.change_scope || "medium";
+  const editBlock = formatEditTargetsForPrompt(knowledge, {
+    changeScope: scope,
+    includeContent: options.includeContent !== false,
+    maxFiles: options.maxFiles,
+  });
+
+  const payload = {
     title: spec.title,
-    overview: (spec.overview || "").slice(0, 600),
-    change_scope: spec.change_scope || knowledge?.change_scope,
+    overview: (spec.overview || "").slice(0, 280),
+    change_scope: scope,
     change_type: spec.change_type || knowledge?.change_type,
-    backend_needed: spec.backend_needed ?? knowledge?.backend_needed,
-    acceptance_criteria: (spec.acceptance_criteria || []).slice(0, 6),
-    frontend_tasks: (spec.frontend_tasks || []).slice(0, 5),
-    files_to_change: (knowledge?.matched_files || [])
-      .filter((f) => f.match_type === "content")
-      .slice(0, 4)
-      .map((f) => f.path),
+    acceptance_criteria: (spec.acceptance_criteria || []).slice(0, 4),
+    frontend_tasks: (spec.frontend_tasks || []).slice(0, 3),
+    files_to_change: editBlock.files_to_change,
+    allow_new_files: editBlock.allow_new_files,
+    edit_rule: editBlock.rule,
   };
+
+  if (editBlock.existing_files?.length) {
+    payload.existing_files = editBlock.existing_files;
+  }
+
+  return payload;
 }
