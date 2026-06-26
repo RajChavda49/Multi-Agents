@@ -1,6 +1,10 @@
 import { fileExistsInRepo, normalizeRelPath } from "./edit-targets.js";
 
-export function validateGeneratedFiles(files, knowledge) {
+/**
+ * Validate source files (A4/A5) against edit_targets.
+ * testFiles (A6) are always allowed — they are new test files by definition.
+ */
+export function validateGeneratedFiles(files, knowledge, testFiles = []) {
   const allowNew = knowledge?.allow_new_files === true;
   const editPaths = new Set(
     (knowledge?.edit_targets || [])
@@ -11,6 +15,14 @@ export function validateGeneratedFiles(files, knowledge) {
   const valid = [];
   const blocked = [];
 
+  // A6 test files — always valid, always allowed as new files
+  for (const file of testFiles || []) {
+    const rel = normalizeRelPath(file?.path);
+    if (!rel) continue;
+    valid.push({ ...file, path: rel });
+  }
+
+  // A4/A5 source files — checked against edit_targets
   for (const file of files || []) {
     const rel = normalizeRelPath(file?.path);
     if (!rel) continue;

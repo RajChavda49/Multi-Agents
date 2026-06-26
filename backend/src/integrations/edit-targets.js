@@ -1,6 +1,26 @@
 import fs from "fs";
 import path from "path";
 import { getTargetRepoPath } from "./local-repo.js";
+import {
+  editAlreadyApplied,
+  findVerbatimAnchors,
+  resolveSearchBlock,
+} from "./patch-resolve.js";
+
+function resolveEditPath(editPath, hintPaths = []) {
+  const rel = normalizeRelPath(editPath);
+  if (rel && fileExistsInRepo(rel)) return rel;
+
+  const base = path.basename(rel || editPath || "");
+  for (const hint of hintPaths || []) {
+    const normalized = normalizeRelPath(hint);
+    if (normalized && path.basename(normalized) === base && fileExistsInRepo(normalized)) {
+      return normalized;
+    }
+  }
+
+  return rel;
+}
 
 export function normalizeUiArea(uiArea) {
   const area = String(uiArea || "").toLowerCase();
@@ -45,7 +65,7 @@ export function readRepoFile(relPath, maxChars = 12000) {
   try {
     const full = path.resolve(repo, rel);
     const content = fs.readFileSync(full, "utf-8");
-    return content.slice(0, maxChars);
+    return maxChars > 0 ? content.slice(0, maxChars) : content;
   } catch {
     return null;
   }
@@ -76,13 +96,21 @@ export function codingPromptLimits(changeScope = "medium") {
   return { maxFiles: 2, maxCharsPerFile: 4200 };
 }
 
-/** Slice large source files to the render/JSX region so coding prompts stay small. */
-export function excerptFileForCoding(content, relPath = "", maxChars = 3200) {
+/** Slice large source files to the task-relevant region so coding prompts stay small. */
+export function excerptFileForCoding(content, relPath = "", maxChars = 3200, options = {}) {
   if (!content) return "";
   if (content.length <= maxChars) return content;
 
   const lower = content.toLowerCase();
   const pathLower = relPath.toLowerCase();
+  const phrases = (options.phrases || []).map((p) => String(p).trim()).filter((p) => p.length >= 3);
+
+  let anchorAt = -1;
+  for (const phrase of phrases) {
+    const idx = content.indexOf(phrase);
+    if (idx >= 0 && (anchorAt < 0 || idx < anchorAt)) anchorAt = idx;
+  }
+
   const anchors = [
     "<header",
     "return (",
@@ -90,13 +118,16 @@ export function excerptFileForCoding(content, relPath = "", maxChars = 3200) {
     "render()",
     "render:",
     pathLower.includes("footer") ? "<footer" : null,
+    pathLower.includes("footer") ? "stayconnectedbox" : null,
+    pathLower.includes("footer") ? "copyrightbox" : null,
     pathLower.includes("header") ? "header" : null,
   ].filter(Boolean);
 
-  let anchorAt = -1;
-  for (const anchor of anchors) {
-    const idx = lower.indexOf(anchor);
-    if (idx >= 0 && (anchorAt < 0 || idx < anchorAt)) anchorAt = idx;
+  if (anchorAt < 0) {
+    for (const anchor of anchors) {
+      const idx = lower.indexOf(anchor);
+      if (idx >= 0 && (anchorAt < 0 || idx < anchorAt)) anchorAt = idx;
+    }
   }
 
   const start = anchorAt >= 0 ? Math.max(0, anchorAt - 320) : 0;
@@ -117,7 +148,8 @@ export function formatEditTargetsForPrompt(knowledge, options = {}) {
   const scope = options.changeScope || knowledge?.change_scope || "medium";
   const limits = codingPromptLimits(scope);
   const maxFiles = options.maxFiles ?? limits.maxFiles;
-  const maxCharsPerFile = options.maxCharsPerFile ?? limits.maxCharsPerFile;
+  // Provide a generous excerpt so the model can write exact search strings
+  const maxCharsPerFile = options.maxCharsPerFile ?? Math.min(limits.maxCharsPerFile + 2000, 5000);
   const includeContent = options.includeContent !== false;
 
   const targets = (knowledge?.edit_targets || [])
@@ -129,6 +161,7 @@ export function formatEditTargetsForPrompt(knowledge, options = {}) {
     return {
       files_to_change: [],
       existing_files: [],
+      patch_mode: true,
       rule: "No confirmed existing files — STOP and set needs_clarification instead of inventing paths.",
     };
   }
@@ -136,20 +169,109 @@ export function formatEditTargetsForPrompt(knowledge, options = {}) {
   const result = {
     files_to_change: targets.map((t) => t.path),
     allow_new_files: knowledge.allow_new_files === true,
-    rule: "EDIT ONLY files_to_change. Return full updated file content. Do NOT create src/ paths or new components unless allow_new_files is true.",
+    patch_mode: true,
+    rule:
+      'Return ONLY { "edits": [{"path", "search", "replace"}] }. Copy "search" VERBATIM from verbatim_anchors or the excerpt (full line, including JSX/tags). Change ONLY the minimum needed.',
   };
+
+  const searchPhrases = [
+    ...(knowledge?.task_intent?.content_search_phrases || []),
+    ...quotedPhrasesFromTask(knowledge?.jira_task),
+  ];
 
   if (includeContent) {
     result.existing_files = targets.map((t) => {
-      const raw = t.content || readRepoFile(t.path, maxCharsPerFile + 2000) || "";
-      return {
+      const raw = t.content || readRepoFile(t.path, 0) || "";
+      const anchors = findVerbatimAnchors(raw, searchPhrases);
+      const entry = {
         path: t.path,
-        excerpt: excerptFileForCoding(raw, t.path, maxCharsPerFile),
+        excerpt: excerptFileForCoding(raw, t.path, maxCharsPerFile, { phrases: searchPhrases }),
       };
+      if (anchors.length) {
+        entry.verbatim_anchors = anchors;
+      }
+      return entry;
     });
   }
 
   return result;
+}
+
+/**
+ * Apply a list of search/replace edits to the target repo files.
+ * Each edit: { path, search, replace }
+ * Returns an array of { path, content } ready for writeCodeFiles.
+ */
+export function applyEditsToRepo(edits, options = {}) {
+  const files = [];
+  const seen = new Map();
+  const pathHints = options.pathHints || [];
+
+  for (const edit of edits || []) {
+    const rel = resolveEditPath(edit.path, pathHints);
+    if (!rel) continue;
+
+    const original = seen.has(rel) ? seen.get(rel) : readRepoFile(rel, 0);
+    if (original === null) {
+      throw new Error(`applyEditsToRepo: file not found in repo: ${rel}`);
+    }
+
+    const rawSearch = edit.search ?? "";
+    const rawReplace = edit.replace ?? "";
+
+    if (!rawSearch) {
+      throw new Error(`applyEditsToRepo: edit for ${rel} is missing "search" string`);
+    }
+
+    if (editAlreadyApplied(original, rawSearch, rawReplace)) {
+      seen.set(rel, original);
+      continue;
+    }
+
+    const resolved = resolveSearchBlock(original, rawSearch, rawReplace);
+    if (!resolved) {
+      throw new Error(
+        `applyEditsToRepo: search block not found in ${rel} — copy an exact line from verbatim_anchors or the excerpt`,
+      );
+    }
+
+    const { search, replace, strategy } = resolved;
+
+    if (original.length > 500 && search.length > original.length * 0.4) {
+      throw new Error(
+        `applyEditsToRepo: search block for ${rel} is too large (${search.length} chars = ${Math.round((search.length / original.length) * 100)}% of file). ` +
+          `Use a smaller, targeted search string of 3–20 lines that uniquely identifies the change location.`,
+      );
+    }
+
+    const count = original.split(search).length - 1;
+    if (count > 1) {
+      throw new Error(
+        `applyEditsToRepo: search block matches ${count} times in ${rel} — use a more specific search string`,
+      );
+    }
+
+    const patched = original.replace(search, replace);
+
+    if (original.length > 500 && patched.length < original.length * 0.85) {
+      throw new Error(
+        `applyEditsToRepo: edit for ${rel} would shrink file from ${original.length} to ${patched.length} chars. ` +
+          `The search block is likely too large. Use a targeted 3–20 line search string that captures only the changed section.`,
+      );
+    }
+
+    if (strategy !== "exact") {
+      console.log(`[patch-resolve] ${rel}: ${strategy} (${rawSearch.length} → ${search.length} chars)`);
+    }
+
+    seen.set(rel, patched);
+  }
+
+  for (const [filePath, content] of seen) {
+    files.push({ path: filePath, content });
+  }
+
+  return files;
 }
 
 export { quotedPhrasesFromTask };

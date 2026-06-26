@@ -238,15 +238,17 @@ async function devParallelNode(state) {
     [a4, a5, a6] = await Promise.all([a4Promise, runA5Backend(state), a6Promise]);
   }
 
-  const allFiles = [
+  const sourceFiles = [
     ...(a4.frontend_code?.files || []),
     ...(a5.backend_code?.files || []),
-    ...(a6.test_code?.files || []),
   ];
+  const testFiles = a6.test_code?.files || [];
+  const allFiles = [...sourceFiles, ...testFiles];
 
   let filesToWrite = allFiles;
   let knowledge = state.knowledge_context;
-  let validation = validateGeneratedFiles(filesToWrite, knowledge);
+  // Pass test files separately — they are always new files and bypass edit_targets guard
+  let validation = validateGeneratedFiles(sourceFiles, knowledge, testFiles);
 
   if (validation.needs_clarification) {
     saveNodeProgress(state.pipeline_id, {
@@ -272,7 +274,7 @@ async function devParallelNode(state) {
     });
 
     knowledge = applyUserTargetConfirmation(knowledge, decision, state.jira_task);
-    validation = validateGeneratedFiles(filesToWrite, knowledge);
+    validation = validateGeneratedFiles(sourceFiles, knowledge, testFiles);
 
     if (!decision.allow_new_files) {
       filesToWrite = validation.valid;

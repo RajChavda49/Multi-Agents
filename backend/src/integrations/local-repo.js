@@ -9,6 +9,7 @@ import {
 import { captureFileSnapshot } from "./repo-revert.js";
 import { normalizeUiArea } from "./repo-task-intent.js";
 
+
 const IGNORE_DIRS = new Set([
   "node_modules",
   ".git",
@@ -557,6 +558,22 @@ File tree sample: ${JSON.stringify(knowledge.file_tree_sample || [])}
 `;
 }
 
+const TRUNCATION_MARKERS = /chars omitted|omitted above|omitted below/i;
+
+/** Read the current on-disk content of a repo file without a size cap. Returns null if absent. */
+function readOriginalFile(relPath) {
+  const root = getTargetRepoPath();
+  if (!root || !relPath) return null;
+  try {
+    const full = path.resolve(root, relPath);
+    if (!full.startsWith(path.resolve(root) + path.sep) && full !== path.resolve(root)) return null;
+    if (!fs.existsSync(full) || !fs.statSync(full).isFile()) return null;
+    return fs.readFileSync(full, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
 export function writeFilesToTargetRepo(files, snapshotMap = {}) {
   if (!isTargetRepoConfigured()) {
     return { written: [], skipped: true, reason: "TARGET_REPO_PATH not configured" };
@@ -571,13 +588,30 @@ export function writeFilesToTargetRepo(files, snapshotMap = {}) {
 
   for (const file of files || []) {
     if (!file?.path) continue;
+    const content = file.content ?? "";
+    const original = readOriginalFile(file.path);
+
+    // Guard 1: LLM returned a prompt excerpt instead of the full file
+    if (TRUNCATION_MARKERS.test(content)) {
+      throw new Error(
+        `Refusing to write ${file.path}: model returned a prompt excerpt instead of the full file`,
+      );
+    }
+
+    // Guard 2: output is significantly shorter than the original — likely truncated
+    if (original && content.length < original.length * 0.85) {
+      throw new Error(
+        `Refusing to write ${file.path}: output (${content.length} chars) would truncate original (${original.length} chars)`,
+      );
+    }
+
     if (!snapshots[file.path]) {
       snapshots[file.path] = captureFileSnapshot(file.path);
     }
 
     const fullPath = assertInsideRepo(file.path);
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-    fs.writeFileSync(fullPath, file.content, "utf-8");
+    fs.writeFileSync(fullPath, content, "utf-8");
     written.push(file.path);
   }
 

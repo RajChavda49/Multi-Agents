@@ -1,3 +1,509 @@
 {
-  "pipelines": []
+  "pipelines": [
+    {
+      "id": "32b030d4-deaa-4f67-8003-d0ef972b5ced",
+      "pipeline_id": "32b030d4-deaa-4f67-8003-d0ef972b5ced",
+      "graph_thread_id": "32b030d4-deaa-4f67-8003-d0ef972b5ced",
+      "jira_task": {
+        "key": "KAN-5",
+        "summary": "UI Content Update In Footer Section",
+        "description": "Update the text in the footer section to personalize the branding. Specifically, replace the existing text \"Add us on social media?\" with \"Raj chavda\".\nWhat to Change\nTarget Text: Replace the string \"Add us on social media?\" with \"Raj chavda\".\nAcceptance Criteria\n[ ] The text \"Add us on social media?\" is successfully removed.\n[ ] The text \"Raj chavda\" is correctly rendered in its place.\n[ ] The update does not cause any layout distortion or text overflow in the footer or designated section.\n[ ] The styling (font, size, alignment) of \"Raj chavda\" matches the original design requirements.",
+        "issue_type": "Task",
+        "priority": "Medium",
+        "status": "To Do",
+        "assignee": "Raj Chavda",
+        "url": "https://rajcodes49.atlassian.net/browse/KAN-5"
+      },
+      "phase": "development",
+      "status": "phase_2_running",
+      "current_agent": "A6",
+      "knowledge_context": {
+        "summary": "Update the text in the footer section to personalize the branding by replacing 'Add us on social media?' with 'Raj chavda'. Ensure no layout issues and maintain original design requirements.",
+        "repo_connected": true,
+        "repo_path": "/home/cp/cp_projects/bannerbuzz-nextjs",
+        "project_name": "bannerbuzz-nextjs",
+        "stack": [
+          "next.js",
+          "react",
+          "express"
+        ],
+        "task_intent": {
+          "intent_summary": "The user wants to update text in the footer section of a website by replacing 'Add us on social media?' with 'Raj chavda' while ensuring no layout issues and maintaining original design requirements.",
+          "ui_area": "site_footer",
+          "content_search_phrases": [
+            "Add us on social media?",
+            "Raj chavda",
+            "Replace the string 'Add us on social media?' with 'Raj chavda'",
+            "text overflow in the footer",
+            "layout distortion",
+            "'Raj chavda' matches the original design requirements"
+          ],
+          "include_path_hints": [
+            "Footer",
+            "FooterLinks",
+            "NewFooter"
+          ],
+          "exclude_path_hints": [
+            "CartHeader",
+            "checkout",
+            "Skeleton",
+            "table_header"
+          ],
+          "relevant_module_hints": [
+            "components/Common/FooterLinks",
+            "components/Common/NewFooter"
+          ]
+        },
+        "relevant_modules": [
+          "components/Common/FooterLinks",
+          "components/Common/NewFooter",
+          "components/Common/Footer",
+          "components/Common/FooterLinks/StartRating"
+        ],
+        "matched_files": [
+          {
+            "path": "components/Common/FooterLinks/FooterLinks.js",
+            "snippet": "ghtBox\">\n              <div className=\"stayConnectedBox\">\n                <h6>{'Add us on social media?'}</h6>\n                <link href={domain} />\n\n                {isHomePage && (",
+            "match_type": "content",
+            "search_phrase": "Add us on social media?"
+          },
+          {
+            "path": "components/Common/NewFooter/NewFooter.js",
+            "snippet": "import React, { useEffect, useRef } from 'react';\nimport PropTypes from 'prop-types';\nimport dynamic from 'next/dynamic';\nimport { useSelector } from 'react-redux';\nimport { setEcommerceDataLayerPage } from '@/utils/common/ecommerceDataLayer';\nimport { setWebsiteTabSession, unSetWebsiteTabSession } from '@/utils/common/websiteTabSession';\nimport { setWebengageViewedProduct } from '@/utils/webEngage/setWebengageProductSearch';\nimport { setWebengagePageView } from '@/utils/webEngage/setWebEngageCommon';\nimport { checkIsLiteHouseOrGTmatrix } from '@/utils/deviceDetect';\nimport { checkIsPrivilegedUser } from '@/utils/commonFunction';\nimport RefferBanner from '../StayUpdate/RefferBanner';\nimport ThirdPartyJS from '../Footer/ThirdPartyJS';\n\nconst Stayupdate = dynamic(() => import('../StayUpdate/StayUpdate'));\nconst Footerlinks = dynamic(() => import('../FooterLinks/FooterLinks'));\n\nconst getFooterTypeClass = (footerType) => {\n  switch (footerType) {\n    case 0:\n      return 'FooterTypeZiro';\n    case 1:\n      return 'FooterTypeOne';\n    case 2:\n      return 'FooterTypeTwo';\n    case 4:\n      return 'FooterTypeFour';\n    case 5:\n      return 'FooterTypeFive';\n    case 6:\n      return 'FooterTypeSix';\n    default:\n      return 'FooterTypeZiro';\n  }\n};\n\nconst Footer = ({ footerType, headertype, userAgent, router, loadThirdParty }) => {\n  const { storedata, dataLayerPage, currentUrl, customerId } = useSelector(({ app, common, customer }) => ({\n    storedata: app.storedata,\n    dataLaye",
+            "match_type": "intent",
+            "score": 35
+          },
+          {
+            "path": "components/Common/Footer/Footer.js",
+            "snippet": "import React from 'react';\nimport PropTypes, { instanceOf } from 'prop-types';\nimport dynamic from 'next/dynamic';\nimport { withCookies, Cookies } from 'react-cookie';\nimport { connect } from 'react-redux';\nimport { setEcommerceDataLayerPage } from '@/utils/common/ecommerceDataLayer';\nimport { setWebsiteTabSession, unSetWebsiteTabSession } from '@/utils/common/websiteTabSession';\nimport { setWebengageViewedProduct } from '@/utils/webEngage/setWebengageProductSearch';\nimport { setWebengagePageView } from '@/utils/webEngage/setWebEngageCommon';\nimport { checkIsLiteHouseOrGTmatrix } from '@/utils/deviceDetect';\nimport { checkIsPrivilegedUser } from '@/utils/commonFunction';\nimport RefferBanner from '../StayUpdate/RefferBanner';\n// import Stayupdate from '../StayUpdate/StayUpdate';\n// import Footerlinks from '../FooterLinks/FooterLinks';\nimport ThirdPartyJS from './ThirdPartyJS';\n\nconst Stayupdate = dynamic(() => import('../StayUpdate/StayUpdate'));\nconst Footerlinks = dynamic(() => import('../FooterLinks/FooterLinks'));\n\nclass Footer extends React.Component {\n  static propTypes = {\n    footerType: PropTypes.number,\n    storedata: PropTypes.object,\n    dataLayerPage: PropTypes.string,\n    currentUrl: PropTypes.string,\n    cookies: instanceOf(Cookies).isRequired,\n    customerId: PropTypes.any,\n    headertype: PropTypes.any,\n    userAgent: PropTypes.any,\n    router: PropTypes.object,\n    loadThirdParty: PropTypes.bool,\n  };\n\n  getFooterTypeClass = (footerType) => {\n    switch (foot",
+            "match_type": "intent",
+            "score": 30
+          },
+          {
+            "path": "components/Common/FooterLinks/FooterLinksData.js",
+            "snippet": "import { getDealerPageURL } from '../../../utils/commonFunction';\n\nconst getFooterLinkObject = (storedata, pageUrls) => {\n  switch (storedata.storeId) {\n    case '2':\n      return {\n        panel1: [\n          {\n            name: ' Write to us',\n            link: `${pageUrls.contact.link}`,\n          },\n          {\n            name: 'Find your answers.',\n            link: '/faqs',\n          },\n        ],\n        panel2: [\n          {\n            name: `${pageUrls.orderTracking.name}`,\n            link: `${pageUrls.orderTracking.link}`,\n          },\n          {\n            name: 'BannerBuzz Wallet',\n            link: '/wallet',\n          },\n          {\n            name: `${pageUrls.customerReviews.name}`,\n            link: `${pageUrls.customerReviews.link}`,\n          },\n          {\n            name: `${pageUrls.coupons.name}`,\n            link: `${pageUrls.coupons.link}`,\n          },\n          {\n            name: 'Sitemap',\n            link: '/sitemap',\n          },\n          {\n            name: 'Blog',\n            link: `${storedata.domain}/blog/`,\n            target: '_blank',\n            // rel: \"noreferrer\",\n          },\n          // {\n          //   name: 'Buzz Catalog',\n          //   link: '/brand/index.pdf',\n          //   target: '_blank',\n          // },\n          {\n            name: 'Banners for a Cause',\n            link: '/free-charity-banner',\n          },\n        ],\n        panel3: [\n          {\n            name: 'About Us',\n            link: '/about-us',\n    ",
+            "match_type": "intent",
+            "score": 17
+          },
+          {
+            "path": "components/Common/FooterLinks/Footerlinksstyled.js",
+            "snippet": "import styled from 'styled-components';\nimport getConfig from 'next/config';\nimport { imgsprite, transition, fontsfamily, calcsize, calcsizes } from '@/theme/custom/mixins';\nconst { publicRuntimeConfig } = getConfig();\n\nconst ShopConfidenceSprite = `\n  background: url(${publicRuntimeConfig.CDN_FOR_STATIC_DATA}/static/images/common/footerlinks/shop-confidence-new.png) left top no-repeat;\n`;\n\nexport default styled.div`\n  width: 100%;\n  float: left;\n  height: auto;\n  padding: 50px 0 40px 0;\n\n  @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n    padding: 30px 0;\n  }\n\n  h6 {\n    margin-bottom: 20px;\n  }\n\n  .ceoMessageLink {\n    font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '-')};\n    color: ${({ theme }) => theme.colors.graycolor2};\n    font-family: ${({ theme }) => theme.fonts.fontopensansmedium};\n    line-height: 26px;\n\n    ${transition()};\n\n    &:hover {\n      color: ${({ theme }) => theme.colors.primary2};\n      ${transition()};\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screensm}) {\n      font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 3, '-')};\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '-')};\n    }\n  }\n\n  .contactDetailsBox {\n    width: 345px;\n    float: left;\n    height: auto;\n\n    @media (max-width: ${({ theme }) => theme.container.screenlg}) {\n      width: 310px;\n    }\n\n    @media (max-wi",
+            "match_type": "intent",
+            "score": 17
+          },
+          {
+            "path": "components/Common/FooterLinks/StartRating/StarRatingStyle.js",
+            "snippet": "import styled from 'styled-components';\nimport { calcsize } from '@/theme/custom/mixins';\n\nexport default styled.div`\n  width: auto;\n  display: inline-block;\n  padding: 0 0 0 0;\n  line-height: 14px;\n  height: 14px;\n  text-align: center;\n  color: ${({ theme }) => theme.colors.graycolor53};\n  font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 6, '+')};\n  text-align: center;\n  margin: 8px 0 0 0;\n\n  @media (max-width: ${({ theme }) => theme.container.screensm}) {\n    vertical-align: top;\n    margin: 8px 0 0 0;\n  }\n\n  &.macStar {\n    font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '+')};\n\n    @media (max-width: ${({ theme }) => theme.container.screenxlg}) {\n      position: relative;\n    }\n  }\n\n  .starRateGroupBox {\n    width: auto;\n    display: inline-block;\n    height: auto;\n  }\n\n  .totalReviewBox {\n    width: auto;\n    display: inline-block;\n    font-size: ${({ theme }) => theme.fontsize.fontbasesizes};\n    color: ${({ theme }) => theme.colors.graycolor2};\n    font-family: ${({ theme }) => theme.fonts.fontopensansregular};\n    vertical-align: top;\n    white-space: nowrap;\n    margin: 0 0 0 0;\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 4, '-')};\n      color: ${({ theme }) => theme.colors.graycolor33};\n    }\n  }\n  .reviewRateBox {\n    width: auto;\n    display: inline-block;\n    font-size: ${({ theme }) => theme.fontsize.fontbasesizes};\n    color: $",
+            "match_type": "intent",
+            "score": 17
+          }
+        ],
+        "key_files": [
+          "package.json",
+          "README.md",
+          "next.config.js"
+        ],
+        "package_scripts": [
+          "start",
+          "winstart",
+          "build",
+          "winbuild",
+          "serve",
+          "serve:win",
+          "precommit",
+          "lint-css",
+          "lint-js",
+          "start:production",
+          "analyze",
+          "lint",
+          "prepare",
+          "pre-commit",
+          "postinstall",
+          "minify-css"
+        ],
+        "constraints": [],
+        "dependencies": [],
+        "risks": [],
+        "documentation_refs": [
+          "README.md"
+        ],
+        "codebase_notes": "Update the text in the footer section by replacing 'Add us on social media?' with 'Raj chavda'. Ensure no layout issues and maintain original design requirements. The changes should be made in one or more of the identified files: FooterLinks.js, NewFooter.js, or Footer.js.",
+        "file_tree_sample": [
+          {
+            "path": ".babelrcdd",
+            "type": "file",
+            "size": 233
+          },
+          {
+            "path": ".dockerignore",
+            "type": "file",
+            "size": 184
+          },
+          {
+            "path": ".env.development",
+            "type": "file",
+            "size": 76222
+          },
+          {
+            "path": ".env.production",
+            "type": "file",
+            "size": 68167
+          },
+          {
+            "path": ".eslintrc",
+            "type": "file",
+            "size": 1853
+          },
+          {
+            "path": ".gitattributes",
+            "type": "file",
+            "size": 727
+          },
+          {
+            "path": ".gitignore",
+            "type": "file",
+            "size": 792
+          },
+          {
+            "path": ".husky/",
+            "type": "dir"
+          },
+          {
+            "path": ".husky/_/",
+            "type": "dir"
+          },
+          {
+            "path": ".husky/_/.gitignore",
+            "type": "file",
+            "size": 1
+          },
+          {
+            "path": ".husky/_/husky.sh",
+            "type": "file",
+            "size": 717
+          },
+          {
+            "path": ".prettierrc",
+            "type": "file",
+            "size": 72
+          },
+          {
+            "path": ".stylelintrc.js",
+            "type": "file",
+            "size": 2347
+          },
+          {
+            "path": "DesignSystem/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Button/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Button/Button.js",
+            "type": "file",
+            "size": 3025
+          },
+          {
+            "path": "DesignSystem/Button/ButtonStyled.js",
+            "type": "file",
+            "size": 1585
+          },
+          {
+            "path": "DesignSystem/Image/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Image/Image.js",
+            "type": "file",
+            "size": 1828
+          },
+          {
+            "path": "DesignSystem/Input/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Typography/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/Typography/Typograph.js",
+            "type": "file",
+            "size": 920
+          },
+          {
+            "path": "DesignSystem/Typography/TypographyStyled.js",
+            "type": "file",
+            "size": 10482
+          },
+          {
+            "path": "DesignSystem/theme/",
+            "type": "dir"
+          },
+          {
+            "path": "DesignSystem/theme/themeBbDs.js",
+            "type": "file",
+            "size": 2966
+          },
+          {
+            "path": "DesignSystem/theme/themeBosDs.js",
+            "type": "file",
+            "size": 0
+          },
+          {
+            "path": "DesignSystem/utils/",
+            "type": "dir"
+          },
+          {
+            "path": "Dockerfile",
+            "type": "file",
+            "size": 1571
+          },
+          {
+            "path": "Dockerfile-local",
+            "type": "file",
+            "size": 501
+          },
+          {
+            "path": "README.md",
+            "type": "file",
+            "size": 522
+          },
+          {
+            "path": "Readme.md",
+            "type": "file",
+            "size": 522
+          },
+          {
+            "path": "analyze/",
+            "type": "dir"
+          },
+          {
+            "path": "api/",
+            "type": "dir"
+          },
+          {
+            "path": "api/AdminOrderApi.js",
+            "type": "file",
+            "size": 618
+          },
+          {
+            "path": "api/AffiliateProgram.js",
+            "type": "file",
+            "size": 574
+          },
+          {
+            "path": "api/AreasOfService.js",
+            "type": "file",
+            "size": 641
+          },
+          {
+            "path": "api/CartApi.js",
+            "type": "file",
+            "size": 51885
+          },
+          {
+            "path": "api/CategoryList.js",
+            "type": "file",
+            "size": 1544
+          },
+          {
+            "path": "api/CharityApi.js",
+            "type": "file",
+            "size": 2173
+          },
+          {
+            "path": "api/CheckoutApi.js",
+            "type": "file",
+            "size": 31545
+          }
+        ],
+        "change_scope": "short",
+        "change_type": "ui_copy",
+        "backend_needed": false,
+        "backend_reason": "No backend changes are required for this task as it only involves UI text replacement.",
+        "edit_targets": [
+          {
+            "path": "components/Common/FooterLinks/FooterLinks.js",
+            "source": "repo_scan",
+            "match_type": "content",
+            "exists": true,
+            "content": "import React, { useEffect, useRef } from 'react';\nimport PropTypes from 'prop-types';\nimport { translate } from 'react-i18next';\n// import PanelGroup from 'react-bootstrap/lib/PanelGroup';\n// import Panel from 'react-bootstrap/lib/Panel';\nimport { useDispatch, useSelector } from 'react-redux';\nimport Link from 'next/link';\nimport { Panel, PanelGroup } from '@/components/Common/Panel';\nimport { getGlobalAdminStoreConfig, getMenuData, getmobileMenuBanner } from '@/api/CommonApi';\nimport Head from 'next/head';\nimport getConfig from 'next/config';\nimport { createHeader } from '@/utils/api';\nimport { click, dataLayerPush } from '@/utils/gtm';\nimport { setAdobeFooterLinks } from '@/utils/common/AdobeEvents/headerAdobeEvents';\nimport { setAdobeSocialMediaIcons } from '@/utils/common/AdobeEvents/commonAdobeEvents';\nimport Panelstyled from '@/theme/custom/Panelstyled';\nimport { getCookieObj } from '@/utils/common/cookieObj';\nimport Digicert from '../Digicert/Digicert';\nimport SitejabberBadge from '../SiteJabber/SitejabberBadge';\nimport getFooterLinkObject from './FooterLinksData';\n\nconst { publicRuntimeConfig } = getConfig();\n\nconst FooterLinks = ({ footerType, router, headertype, t, isLighthouse, loadThirdParty }) => {\n  const dispatch = useDispatch();\n  const { storedata, pageUrls } = useSelector((store) => store.app);\n  const customerData = useSelector((store) => store.customer);\n  const { menuData, mobileMenuBanner, currentUrl, adminStoreConfig } = useSelector((store) => store.common);\n  const customerDataRef = useRef(customerData);\n  customerDataRef.current = customerData;\n\n  const dateObj = new Date();\n  const cYear = dateObj.getFullYear();\n\n  const renderLinkData = (data, eventtype, eventKey) => {\n    return (\n      <ul>\n        {data &&\n          data.map((value, index) => (\n            <li key={index}>\n              {value.target ? (\n                <a\n                  href={value.link}\n                  target=\"_blank\"\n                  onClick={() => {\n                    setAdobeFooterLinks(value.name, eventtype, eventKey);\n                    click('footer', value.name, 'Home', '');\n                  }}\n                  {...(value?.rel ? { rel: value?.rel } : {})}\n                >\n                  {value.name}\n                  {value.isNew && (\n                    <img\n                      src={`${publicRuntimeConfig.CDN_FOR_STATIC_DATA}/static/images/common/refernEarnNew.svg`}\n                      alt=\"new\"\n                      style={{ marginLeft: '5px', verticalAlign: 'middle' }}\n                    />\n                  )}\n                </a>\n              ) : (\n                <Link legacyBehavior href={value.link}>\n                  <a\n                    onClick={() => {\n                      setAdobeFooterLinks(value.name, eventtype, eventKey);\n                      click('footer', value.name, 'Home', '');\n                    }}\n                  >\n                    {value.name}\n                    {value.isNew && (\n                      <img\n                        src={`${publicRuntimeConfig.CDN_FOR_STATIC_DATA}/static/images/common/refernEarnNew.svg`}\n                        alt=\"new\"\n                        style={{ marginLeft: '5px', verticalAlign: 'middle' }}\n                      />\n                    )}\n                  </a>\n                </Link>\n              )}\n            </li>\n          ))}\n      </ul>\n    );\n  };\n\n  const renderPenalGroup = () => {\n    const urlsData = getFooterLinkObject(storedata, pageUrls);\n    const isDesktop = storedata.deviceType >= 2;\n    return (\n      <Panelstyled className=\"footerLinkMain\">\n        <PanelGroup id=\"accordion-example\" allOpen={isDesktop}>\n          <Panel defaultOpen={isDesktop} eventKey=\"1\" className=\"contactDetailsBox\" title={<h6>{'Get In Touch​'}</h6>}>\n            <div className=\"contactInfoBox\">\n              <Link legacyBehavior href={t('common:telNumber')}>\n                <a\n                  onClick={() => {\n                    dataLayerPush('contact', 'callus_footer', 'Home', '', 'contact_us');\n                    setAdobeFooterLinks('Call Us', 'adb_footer_get_in_touch_links', 'getIntouch');\n                  }}\n                >\n                  <span className=\"footerSprite phone\" />\n                  <p>\n                    {t('common:callUsNumber')}\n                    <span>{' Need to talk? We’re here 24x7.'}</span>\n                  </p>\n                </a>\n              </Link>\n            </div>\n            <div className=\"contactInfoBox\">\n              <Link legacyBehavior href={urlsData.panel1[0].link}>\n                <a\n                  onClick={() => {\n                    dataLayerPush('contact', 'emailus', 'Home', '', 'contact_us');\n                    setAdobeFooterLinks(urlsData?.panel1?.[0]?.name, 'adb_footer_get_in_touch_links', 'getIntouch');\n                  }}\n                >\n                  <span className=\"footerSprite email\" />\n                  <p>\n                    {urlsData.panel1[0].name}\n                    <span>{'For your questions, we’re just an email away.'}</span>\n                  </p>\n                </a>\n              </Link>\n            </div>\n            {\n              <div className=\"contactInfoBox m-bottom-0\">\n                <Link legacyBehavior href={urlsData.panel1[1].link}>\n                  <a\n                    onClick={() => {\n                      setAdobeFooterLinks('Need Help?', 'adb_footer_get_in_touch_links', 'getIntouch');\n                    }}\n                  >\n                    <span className=\"footerSprite help\" />\n                    <p>\n                      Need help?\n                      <span>{urlsData.panel1[1].name}</span>\n                    </p>\n                  </a>\n                </Link>\n              </div>\n            }\n          </Panel>\n          {\n            <Panel defaultOpen={isDesktop} eventKey=\"2\" className=\"shortLinkBox categoryBox\" title={<h6>Category</h6>}>\n              {renderLinkData(urlsData.panel5, 'adb_footer_category_links', 'category')}\n            </Panel>\n          }\n\n          <Panel defaultOpen={isDesktop} eventKey=\"3\" className=\"shortLinkBox informationBox\" title={<h6>{'Information'}</h6>}>\n            {renderLinkData(urlsData.panel2, 'adb_footer_information_links', 'information')}\n          </Panel>\n          <Panel defaultOpen={isDesktop} eventKey=\"4\" className=\"shortLinkBox customerSerivceBox\" title={<h6>{'Customer Service'}</h6>}>\n            {renderLinkData(urlsData.panel3, 'adb_footer_customer_serivce_links', 'customerSerivce')}\n          </Panel>\n          {\n            <Panel defaultOpen={isDesktop} eventKey=\"5\" className=\"shortLinkBox helpStationBox\" title={<h6>Help Station</h6>}>\n              {renderLinkData(urlsData.panel4, 'adb_footer_help_station_links', 'helpStation')}\n            </Panel>\n          }\n          <Panel defaultOpen={isDesktop} eventKey=\"6\" className=\"customerReview\" title={<h6>Customer Reviews</h6>}>\n            <SitejabberBadge shouldFetchData />\n          </Panel>\n        </PanelGroup>\n      </Panelstyled>\n    );\n  };\n\n  const renderFooterTypeZero = () => {\n    const { domain } = storedata;\n    const isHomePage = currentUrl == '/' || router.asPath == '/new-home';\n    const sameAs = [];\n\n    sameAs.push(t('common:facebookSocial'));\n    sameAs.push(t('common:twitterSocial'));\n\n    if (storedata.storeId == 6) {\n      sameAs.push(t('common:instagramSocial'));\n      sameAs.push(t('common:youtubeSocial'));\n      sameAs.push(t('common:pinterestSocial'));\n    }\n\n    if (storedata.storeId != 6) {\n      if (storedata.storeId == 1) {\n        sameAs.push(t('common:linkedinSocial'));\n      }\n      sameAs.push(t('common:youtubeSocial'));\n      sameAs.push(t('common:pinterestSocial'));\n      if (storedata.storeId != 5) {\n        sameAs.push(t('common:instagramSocial'));\n      }\n    }\n\n    const orgSchema = {\n      '@context': 'https://schema.org',\n      '@type': 'Organization',\n      url: domain,\n      sameAs: [...new Set(sameAs)].filter(Boolean),\n      ...(isHomePage && {\n        name: t('common:organisationName'),\n        legalName: t('common:organisationLegalName'),\n        logo: `${domain}/static/images/store/${storedata.storeId}/logo/logo.svg`,\n        foundingDate: t('common:foundingDate'),\n        founder: {\n          '@type': 'Person',\n          name: t('common:founderName'),\n        },\n        address: {\n          '@type': 'PostalAddress',\n          streetAddress: t('common:streetAddress'),\n          addressLocality: t('common:addressLocality'),\n          addressRegion: t('common:addressRegion'),\n          postalCode: t('common:postalCode'),\n          addressCountry: t('common:addressCountry'),\n        },\n        contactPoint: {\n          '@type': 'ContactPoint',\n          contactType: 'customer support',\n          telephone: t('common:organisationTelphone'),\n          email: t('common:organisationEmail'),\n        },\n      }),\n    };\n\n    return (\n      <>\n        <Head>\n          <script\n            type=\"application/ld+json\"\n            dangerouslySetInnerHTML={{\n              __html: JSON.stringify(orgSchema),\n            }}\n          />\n        </Head>\n        <div className=\"Footerlinksstyled\">\n          <div className=\"container\">\n            {renderPenalGroup()}\n            <div className=\"clearfix\" />\n            <hr />\n            <div className=\"copyrightBox\">\n              <div className=\"stayConnectedBox\">\n                <h6>{'Add us on social media?'}</h6>\n                <link href={domain} />\n\n                {isHomePage && (\n                  <div className=\"hide\">\n                    <span className=\"hide\">{t('common:organisationName')}</span>\n                    <span className=\"hide\">{t('common:organisationLegalName')}</span>\n                    <span className=\"hide\">{`${domain}/static/images/store/${storedata.storeId}/logo/logo.svg`}</span>\n                    <span className=\"hide\">{t('common:foundingDate')}</span>\n                    <span className=\"hide\">\n "
+          },
+          {
+            "path": "components/Common/NewFooter/NewFooter.js",
+            "source": "repo_scan",
+            "match_type": "intent",
+            "exists": true,
+            "content": "import React, { useEffect, useRef } from 'react';\nimport PropTypes from 'prop-types';\nimport dynamic from 'next/dynamic';\nimport { useSelector } from 'react-redux';\nimport { setEcommerceDataLayerPage } from '@/utils/common/ecommerceDataLayer';\nimport { setWebsiteTabSession, unSetWebsiteTabSession } from '@/utils/common/websiteTabSession';\nimport { setWebengageViewedProduct } from '@/utils/webEngage/setWebengageProductSearch';\nimport { setWebengagePageView } from '@/utils/webEngage/setWebEngageCommon';\nimport { checkIsLiteHouseOrGTmatrix } from '@/utils/deviceDetect';\nimport { checkIsPrivilegedUser } from '@/utils/commonFunction';\nimport RefferBanner from '../StayUpdate/RefferBanner';\nimport ThirdPartyJS from '../Footer/ThirdPartyJS';\n\nconst Stayupdate = dynamic(() => import('../StayUpdate/StayUpdate'));\nconst Footerlinks = dynamic(() => import('../FooterLinks/FooterLinks'));\n\nconst getFooterTypeClass = (footerType) => {\n  switch (footerType) {\n    case 0:\n      return 'FooterTypeZiro';\n    case 1:\n      return 'FooterTypeOne';\n    case 2:\n      return 'FooterTypeTwo';\n    case 4:\n      return 'FooterTypeFour';\n    case 5:\n      return 'FooterTypeFive';\n    case 6:\n      return 'FooterTypeSix';\n    default:\n      return 'FooterTypeZiro';\n  }\n};\n\nconst Footer = ({ footerType, headertype, userAgent, router, loadThirdParty }) => {\n  const { storedata, dataLayerPage, currentUrl, customerId } = useSelector(({ app, common, customer }) => ({\n    storedata: app.storedata,\n    dataLayerPage: common.dataLayerPage,\n    currentUrl: common.currentUrl,\n    customerId:\n      customer.profile && customer.profile.customer_extra_fields && customer.profile.customer_extra_fields.id\n        ? customer.profile.customer_extra_fields.id\n        : null,\n  }));\n\n  const prevDataLayerPage = useRef(dataLayerPage);\n  const prevCurrentUrl = useRef(currentUrl);\n  const prevFooterType = useRef(footerType);\n\n  useEffect(() => {\n    if (process.env.NODE_ENV === 'production') {\n      import('next-offline/runtime').then((runtime) => {\n        runtime.register();\n      });\n    }\n\n    if (typeof document !== 'undefined' && document.body) {\n      if (navigator.userAgent.indexOf('Mac') > 0) document.body.className += ' mac-os';\n      if (navigator.userAgent.indexOf('Safari') > 0) document.body.className += ' safari';\n      if (navigator.userAgent.indexOf('Chrome') > 0) document.body.className += ' chrome';\n      if (navigator.userAgent.indexOf('Edg') > 0) document.body.className += ' MS_edge';\n      document.body.classList.add(getFooterTypeClass(footerType));\n    }\n\n    return () => {\n      if (typeof window !== 'undefined' && window && typeof document !== 'undefined' && process.env.NODE_ENV === 'production') {\n        import('next-offline/runtime').then((runtime) => {\n          runtime.unregister();\n        });\n      }\n      unSetWebsiteTabSession(customerId);\n    };\n    // mount/unmount parity with class lifecycle\n    // eslint-disable-next-line react-hooks/exhaustive-deps\n  }, []);\n\n  useEffect(() => {\n    if (prevDataLayerPage.current != dataLayerPage) {\n      const recentlyViewed = (localStorage.getItem('rv_prods') && JSON.parse(localStorage.getItem('rv_prods'))) || [];\n      setWebengageViewedProduct('Viewed Product', recentlyViewed);\n      setEcommerceDataLayerPage(dataLayerPage);\n      setWebengagePageView('DL_Pageview', dataLayerPage);\n    }\n    prevDataLayerPage.current = dataLayerPage;\n  }, [dataLayerPage]);\n\n  useEffect(() => {\n    if (prevCurrentUrl.current != currentUrl) {\n      setWebsiteTabSession(customerId);\n    }\n    prevCurrentUrl.current = currentUrl;\n  }, [currentUrl, customerId]);\n\n  useEffect(() => {\n    if (prevFooterType.current != footerType && typeof document !== 'undefined' && document.body) {\n      document.body.classList.remove(getFooterTypeClass(prevFooterType.current));\n      document.body.classList.add(getFooterTypeClass(footerType));\n    }\n    prevFooterType.current = footerType;\n  }, [footerType]);\n\n  const { deviceType } = storedata;\n  const isLighthouse = checkIsLiteHouseOrGTmatrix(userAgent);\n  const isPrivilegedUser = checkIsPrivilegedUser(customerId || 0);\n\n  return (\n    <div\n      className={`FooterMainBox ${router?.asPath === '/privilege' ? 'privilege-page' : ''}${deviceType === 2 ? 'ipadViewBox' : ''} ${\n        deviceType === 1 ? 'mobileViewBox' : ''\n      } ${isPrivilegedUser && deviceType === 2 ? 'privilageFooterbox' : ''}`}\n    >\n      <h1>Raj chavda&apos;s new footer</h1>\n      {storedata?.storeId == 1 && footerType == 0 && <RefferBanner />}\n      {footerType === 0 && router?.asPath !== '/privilege' && <Stayupdate currentUrl={currentUrl} />}\n      <Footerlinks\n        userAgent={userAgent}\n        footerType={footerType}\n        headertype={headertype}\n        isLighthouse={isLighthouse}\n        loadThirdParty={loadThirdParty}\n        router={router}\n      />\n      <ThirdPartyJS isLighthouse={isLighthouse} loadThirdParty={loadThirdParty} />\n    </div>\n  );\n};\n\nFooter.propTypes = {\n  footerType: PropTypes.number,\n  headertype: PropTypes.any,\n  userAgent: PropTypes.any,\n  router: PropTypes.object,\n  loadThirdParty: PropTypes.bool,\n};\n\nexport default Footer;\n"
+          },
+          {
+            "path": "components/Common/Footer/Footer.js",
+            "source": "repo_scan",
+            "match_type": "intent",
+            "exists": true,
+            "content": "import React from 'react';\nimport PropTypes, { instanceOf } from 'prop-types';\nimport dynamic from 'next/dynamic';\nimport { withCookies, Cookies } from 'react-cookie';\nimport { connect } from 'react-redux';\nimport { setEcommerceDataLayerPage } from '@/utils/common/ecommerceDataLayer';\nimport { setWebsiteTabSession, unSetWebsiteTabSession } from '@/utils/common/websiteTabSession';\nimport { setWebengageViewedProduct } from '@/utils/webEngage/setWebengageProductSearch';\nimport { setWebengagePageView } from '@/utils/webEngage/setWebEngageCommon';\nimport { checkIsLiteHouseOrGTmatrix } from '@/utils/deviceDetect';\nimport { checkIsPrivilegedUser } from '@/utils/commonFunction';\nimport RefferBanner from '../StayUpdate/RefferBanner';\n// import Stayupdate from '../StayUpdate/StayUpdate';\n// import Footerlinks from '../FooterLinks/FooterLinks';\nimport ThirdPartyJS from './ThirdPartyJS';\n\nconst Stayupdate = dynamic(() => import('../StayUpdate/StayUpdate'));\nconst Footerlinks = dynamic(() => import('../FooterLinks/FooterLinks'));\n\nclass Footer extends React.Component {\n  static propTypes = {\n    footerType: PropTypes.number,\n    storedata: PropTypes.object,\n    dataLayerPage: PropTypes.string,\n    currentUrl: PropTypes.string,\n    cookies: instanceOf(Cookies).isRequired,\n    customerId: PropTypes.any,\n    headertype: PropTypes.any,\n    userAgent: PropTypes.any,\n    router: PropTypes.object,\n    loadThirdParty: PropTypes.bool,\n  };\n\n  getFooterTypeClass = (footerType) => {\n    switch (footerType) {\n      case 0:\n        return 'FooterTypeZiro';\n      case 1:\n        return 'FooterTypeOne';\n      case 2:\n        return 'FooterTypeTwo';\n      case 4:\n        return 'FooterTypeFour';\n      case 5:\n        return 'FooterTypeFive';\n      case 6:\n        return 'FooterTypeSix';\n      default:\n        return 'FooterTypeZiro';\n    }\n  };\n\n  componentDidMount() {\n    if (process.env.NODE_ENV === 'production') {\n      import('next-offline/runtime').then((runtime) => {\n        runtime.register();\n      });\n    }\n\n    // New Google Consumer Surveys (start)\n    if (document && document.body) {\n      if (navigator.userAgent.indexOf('Mac') > 0) document.body.className += ' mac-os';\n      if (navigator.userAgent.indexOf('Safari') > 0) document.body.className += ' safari';\n      if (navigator.userAgent.indexOf('Chrome') > 0) document.body.className += ' chrome';\n      if (navigator.userAgent.indexOf('Edg') > 0) document.body.className += ' MS_edge';\n      document.body.classList.add(this.getFooterTypeClass(this.props.footerType));\n    }\n  }\n\n  componentDidUpdate(prevProps) {\n    const { customerId } = this.props;\n    const recentlyViewed = (localStorage.getItem('rv_prods') && JSON.parse(localStorage.getItem('rv_prods'))) || [];\n    if (prevProps.dataLayerPage != this.props.dataLayerPage) {\n      setWebengageViewedProduct('Viewed Product', recentlyViewed);\n      setEcommerceDataLayerPage(this.props.dataLayerPage);\n      setWebengagePageView('DL_Pageview', this.props.dataLayerPage);\n    }\n\n    if (prevProps.currentUrl != this.props.currentUrl) {\n      setWebsiteTabSession(customerId);\n    }\n\n    if (prevProps.footerType != this.props.footerType) {\n      document.body.classList.remove(this.getFooterTypeClass(prevProps.footerType));\n      document.body.classList.add(this.getFooterTypeClass(this.props.footerType));\n    }\n  }\n\n  componentWillUnmount() {\n    const { customerId } = this.props;\n    if (typeof window !== 'undefined' && window && document && process.env.NODE_ENV === 'production') {\n      import('next-offline/runtime').then((runtime) => {\n        runtime.unregister();\n      });\n    }\n    unSetWebsiteTabSession(customerId);\n  }\n\n  render() {\n    const { footerType, storedata, userAgent, loadThirdParty } = this.props;\n    const { deviceType } = storedata;\n    const isLighthouse = checkIsLiteHouseOrGTmatrix(userAgent);\n    const isPrivilegedUser = checkIsPrivilegedUser(this.props.customerId || 0);\n    // eslint-disable-next-line no-console\n    return (\n      <div\n        className={`FooterMainBox ${this.props?.router?.asPath === '/privilege' ? 'privilege-page' : ''}${deviceType === 2 ? 'ipadViewBox' : ''} ${\n          deviceType === 1 ? 'mobileViewBox' : ''\n        } ${isPrivilegedUser && deviceType === 2 ? 'privilageFooterbox' : ''}`}\n      >\n        {storedata?.storeId == 1 && footerType == 0 && <RefferBanner />}\n        {footerType === 0 && this.props?.router?.asPath !== '/privilege' && <Stayupdate currentUrl={this.props.currentUrl} />}\n        <Footerlinks\n          userAgent={userAgent}\n          footerType={footerType}\n          headertype={this.props.headertype}\n          isLighthouse={isLighthouse}\n          loadThirdParty={loadThirdParty}\n          router={this.props.router}\n        />\n        <ThirdPartyJS isLighthouse={isLighthouse} loadThirdParty={loadThirdParty} />\n      </div>\n    );\n  }\n}\n\nconst mapStateToProps = ({ app, common, customer }) => ({\n  storedata: app.storedata,\n  dataLayerPage: common.dataLayerPage,\n  pageHttpStatus: common.pageHttpStatus,\n  currentUrl: common.currentUrl,\n  customerId:\n    customer.profile && customer.profile.customer_extra_fields && customer.profile.customer_extra_fields.id ? customer.profile.customer_extra_fields.id : null,\n});\n\nexport default connect(mapStateToProps, null)(withCookies(Footer));\n"
+          },
+          {
+            "path": "components/Common/FooterLinks/FooterLinksData.js",
+            "source": "repo_scan",
+            "match_type": "intent",
+            "exists": true,
+            "content": "import { getDealerPageURL } from '../../../utils/commonFunction';\n\nconst getFooterLinkObject = (storedata, pageUrls) => {\n  switch (storedata.storeId) {\n    case '2':\n      return {\n        panel1: [\n          {\n            name: ' Write to us',\n            link: `${pageUrls.contact.link}`,\n          },\n          {\n            name: 'Find your answers.',\n            link: '/faqs',\n          },\n        ],\n        panel2: [\n          {\n            name: `${pageUrls.orderTracking.name}`,\n            link: `${pageUrls.orderTracking.link}`,\n          },\n          {\n            name: 'BannerBuzz Wallet',\n            link: '/wallet',\n          },\n          {\n            name: `${pageUrls.customerReviews.name}`,\n            link: `${pageUrls.customerReviews.link}`,\n          },\n          {\n            name: `${pageUrls.coupons.name}`,\n            link: `${pageUrls.coupons.link}`,\n          },\n          {\n            name: 'Sitemap',\n            link: '/sitemap',\n          },\n          {\n            name: 'Blog',\n            link: `${storedata.domain}/blog/`,\n            target: '_blank',\n            // rel: \"noreferrer\",\n          },\n          // {\n          //   name: 'Buzz Catalog',\n          //   link: '/brand/index.pdf',\n          //   target: '_blank',\n          // },\n          {\n            name: 'Banners for a Cause',\n            link: '/free-charity-banner',\n          },\n        ],\n        panel3: [\n          {\n            name: 'About Us',\n            link: '/about-us',\n          },\n          {\n            name: `${pageUrls.contact.name}`,\n            link: `${pageUrls.contact.link}`,\n          },\n          {\n            name: `${pageUrls.privacyPolicy.name}`,\n            link: `${pageUrls.privacyPolicy.link}`,\n          },\n          {\n            name: 'Terms of Use',\n            link: `${pageUrls.termsAndConditions.link}`,\n          },\n        ],\n        panel4: [\n          {\n            name: 'FAQs',\n            link: '/faqs',\n          },\n          {\n            name: 'Return Policy',\n            link: '/return-policy',\n          },\n          {\n            name: 'Free Design Proofs',\n            link: '/faqs#FreeDesignProofs',\n          },\n          {\n            name: 'Shipping',\n            link: '/faqs#shipping',\n          },\n          {\n            name: 'Sample Kit',\n            link: '/sample-kit/p',\n          },\n          {\n            name: 'Vectorization',\n            link: '/vectorization/p',\n          },\n          {\n            name: 'Instant Quote',\n            link: '/quickrfq',\n          },\n          {\n            name: 'Business Inquiries',\n            link: getDealerPageURL(storedata.domain),\n            target: '_blank',\n          },\n        ],\n        panel5: [\n          {\n            name: 'Custom Banners',\n            link: '/banners',\n          },\n          {\n            name: 'Vinyl Banners',\n            link: '/vinyl-banners',\n          },\n          {\n            name: 'Banner Stand',\n            link: '/banner-stands',\n          },\n          {\n            name: 'Step & Repeat Media Walls',\n            link: '/step-repeat-media-walls',\n          },\n          {\n            name: 'Gazebo - Marquee - Canopy Tents',\n            link: '/gazebo-marquee-tent',\n          },\n          {\n            name: 'Neon Signs',\n            link: '/neon-signs',\n          },\n          {\n            name: 'Custom Flags',\n            link: '/flags',\n          },\n          {\n            name: 'Asset Tags',\n            link: '/asset-tags',\n          },\n          {\n            name: 'Business Cards',\n            link: '/business-cards',\n          },\n        ],\n      };\n    case '3':\n      return {\n        panel1: [\n          {\n            name: ' Write to us',\n            link: `${pageUrls.contact.link}`,\n          },\n          {\n            name: 'Find your answers.',\n            link: '/faqs',\n          },\n        ],\n        panel2: [\n          {\n            name: `${pageUrls.orderTracking.name}`,\n            link: `${pageUrls.orderTracking.link}`,\n          },\n          {\n            name: 'BannerBuzz Wallet',\n            link: '/wallet',\n          },\n          {\n            name: `${pageUrls.customerReviews.name}`,\n            link: `${pageUrls.customerReviews.link}`,\n          },\n          {\n            name: `${pageUrls.coupons.name}`,\n            link: `${pageUrls.coupons.link}`,\n          },\n          {\n            name: 'Sitemap',\n            link: '/sitemap',\n          },\n          {\n            name: 'Blog',\n            link: `${storedata.domain}/blog/`,\n            target: '_blank',\n            // rel: \"noreferrer\",\n          },\n          // {\n          //   name: 'Buzz Catalog',\n          //   link: '/brand/index.pdf',\n          //   target: '_blank',\n          // },\n          {\n            name: 'Banners for a Cause',\n            link: '/free-charity-banner',\n          },\n        ],\n        panel3: [\n          {\n            name: 'About Us',\n            link: '/about-us',\n          },\n          {\n            name: `${pageUrls.contact.name}`,\n            link: `${pageUrls.contact.link}`,\n          },\n          {\n            name: `${pageUrls.privacyPolicy.name}`,\n            link: `${pageUrls.privacyPolicy.link}`,\n          },\n          {\n            name: 'Terms of Use',\n            link: `${pageUrls.termsAndConditions.link}`,\n          },\n        ],\n        panel4: [\n          {\n            name: 'FAQs',\n            link: '/faqs',\n          },\n          {\n            name: 'Return Policy',\n            link: '/return-policy',\n          },\n          {\n            name: 'Free Design Proofs',\n            link: '/faqs#FreeDesignProofs',\n          },\n          {\n            name: 'Shipping',\n            link: '/faqs#shipping',\n          },\n          {\n            name: 'Sample Kit',\n            link: '/sample-kit/p',\n          },\n          {\n            name: 'Vectorization',\n            link: '/vectorization/p',\n          },\n          {\n            name: 'Instant Quote',\n            link: '/quickrfq',\n          },\n          {\n            name: 'Business Inquiries',\n            link: getDealerPageURL(storedata.domain),\n            target: '_blank',\n          },\n        ],\n        panel5: [\n          {\n            name: 'Custom Banners',\n            link: '/banners',\n          },\n          {\n            name: 'Vinyl Banners',\n            link: '/vinyl-banners',\n          },\n          {\n            name: 'Banner Stand',\n            link: '/banner-stands',\n          },\n          {\n            name: 'Step & Repeat Displays',\n            link: '/step-repeat-displays',\n          },\n          {\n            name: 'Gazebo Tents',\n            link: '/gazebo-tents',\n          },\n          {\n            name: 'Neon Signs',\n            link: '/neon-signs',\n          },\n          {\n            name: 'Custom Flags',\n            link: '/flags',\n          },\n          {\n            name: 'Asset Tags',\n            link: '/asset-tags',\n          },\n          {\n            name: 'Business Cards',\n            link: '/business-cards',\n          },\n        ],\n      };\n    case '4':\n      return {\n        panel1: [\n          {\n            name: ' Write to us',\n            link: `${pageUrls.contact.link}`,\n          },\n          {\n            name: 'Find your answers.',\n            link: '/faqs',\n          },\n        ],\n        panel2: [\n          {\n            name: `${pageUrls.orderTracking.name}`,\n            link: `${pageUrls.orderTracking.link}`,\n          },\n          {\n            name: 'BannerBuzz Wallet',\n            link: '/wallet',\n          },\n          {\n            name: `${pageUrls.customerReviews.name}`,\n            link: `${pageUrls.customerReviews.link}`,\n          },\n          {\n            name: `${pageUrls.coupons.name}`,\n            link: `${pageUrls.coupons.link}`,\n          },\n          {\n            name: 'Sitemap',\n            link: '/sitemap',\n          },\n          {\n            name: 'Blog',\n            link: `${storedata.domain}/blog/`,\n            target: '_blank',\n            // rel: \"noreferrer\",\n          },\n\n          // {\n          //   name: 'Buzz Catalog',\n          //   link: '/brand/index.pdf',\n          //   target: '_blank',\n          // },\n          {\n            name: 'Banners for a Cause',\n            link: '/free-charity-banner',\n          },\n        ],\n        panel3: [\n          {\n            name: 'About Us',\n            link: '/about-us',\n          },\n          {\n            name: `${pageUrls.contact.name}`,\n            link: `${pageUrls.contact.link}`,\n          },\n          {\n            name: `${pageUrls.privacyPolicy.name}`,\n            link: `${pageUrls.privacyPolicy.link}`,\n          },\n          {\n            name: 'Terms of Use',\n            link: `${pageUrls.termsAndConditions.link}`,\n          },\n        ],\n        panel4: [\n          {\n            name: 'FAQs',\n            link: '/faqs',\n          },\n          {\n            name: 'Return Policy',\n            link: '/return-policy',\n          },\n          {\n            name: 'Free Design Proofs',\n            link: '/faqs#FreeDesignProofs',\n          },\n          {\n            name: 'Shipping',\n            link: '/faqs#shipping',\n          },\n          {\n            name: 'Sample Kit',\n            link: '/sample-kit/p',\n          },\n          {\n            name: 'Vectorization',\n            link: '/vectorization/p',\n          },\n          {\n            name: 'Instant Quote',\n            link: '/quickrfq',\n          },\n          {\n            name: 'Business Inquiries',\n            link: getDealerPageURL(storedata.domain),\n            target: '_blank',\n          },\n        ],\n        panel5: [\n          {\n            name: 'Custom Banners',\n            link: '/banners',\n          },\n          {\n            name: 'Vinyl Banners',\n            link: '/vinyl-banners',\n          },\n          {\n            name: 'Banner Stand',\n            link: '/banner-stands',\n          },\n          {\n            name: 'Step & Repeat D"
+          },
+          {
+            "path": "components/Common/FooterLinks/StartRating/StarRatingStyle.js",
+            "source": "repo_scan",
+            "match_type": "intent",
+            "exists": true,
+            "content": "import styled from 'styled-components';\nimport { calcsize } from '@/theme/custom/mixins';\n\nexport default styled.div`\n  width: auto;\n  display: inline-block;\n  padding: 0 0 0 0;\n  line-height: 14px;\n  height: 14px;\n  text-align: center;\n  color: ${({ theme }) => theme.colors.graycolor53};\n  font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 6, '+')};\n  text-align: center;\n  margin: 8px 0 0 0;\n\n  @media (max-width: ${({ theme }) => theme.container.screensm}) {\n    vertical-align: top;\n    margin: 8px 0 0 0;\n  }\n\n  &.macStar {\n    font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '+')};\n\n    @media (max-width: ${({ theme }) => theme.container.screenxlg}) {\n      position: relative;\n    }\n  }\n\n  .starRateGroupBox {\n    width: auto;\n    display: inline-block;\n    height: auto;\n  }\n\n  .totalReviewBox {\n    width: auto;\n    display: inline-block;\n    font-size: ${({ theme }) => theme.fontsize.fontbasesizes};\n    color: ${({ theme }) => theme.colors.graycolor2};\n    font-family: ${({ theme }) => theme.fonts.fontopensansregular};\n    vertical-align: top;\n    white-space: nowrap;\n    margin: 0 0 0 0;\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 4, '-')};\n      color: ${({ theme }) => theme.colors.graycolor33};\n    }\n  }\n  .reviewRateBox {\n    width: auto;\n    display: inline-block;\n    font-size: ${({ theme }) => theme.fontsize.fontbasesizes};\n    color: ${({ theme }) => theme.colors.starRating};\n    font-family: ${({ theme }) => theme.fonts.fontopensansmedium};\n    margin: 1px 5px 0 0;\n    vertical-align: top;\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 4, '-')};\n      margin: 1px 2px 0 0;\n    }\n  }\n\n  [data-star] {\n    width: auto;\n    display: inline-block;\n    text-align: left;\n    font-style: normal;\n    unicode-bidi: bidi-override;\n    vertical-align: top;\n    position: relative;\n    height: 16px;\n    top: -3px;\n  }\n  [data-star]::before {\n    display: block;\n    content: '★★★★★';\n    color: ${({ theme }) => theme.colors.white};\n    padding: 3px 0 0 0;\n  }\n  [data-star]::after {\n    white-space: nowrap;\n    position: absolute;\n    top: 0;\n    left: 0;\n    content: '★★★★★';\n    width: 0;\n    color: #fcb630;\n    overflow: hidden;\n    height: 16px;\n    padding: 3px 0 0 0;\n  }\n\n  [data-star^='0.1']::after {\n    width: 2%;\n  }\n  [data-star^='0.2']::after {\n    width: 4%;\n  }\n  [data-star^='0.3']::after {\n    width: 6%;\n  }\n  [data-star^='0.4']::after {\n    width: 8%;\n  }\n  [data-star^='0.5']::after {\n    width: 10%;\n  }\n  [data-star^='0.6']::after {\n    width: 12%;\n  }\n  [data-star^='0.7']::after {\n    width: 14%;\n  }\n  [data-star^='0.8']::after {\n    width: 16%;\n  }\n  [data-star^='0.9']::after {\n    width: 18%;\n  }\n  [data-star^='1']::after {\n    width: 20%;\n  }\n  [data-star^='1.1']::after {\n    width: 22%;\n  }\n  [data-star^='1.2']::after {\n    width: 24%;\n  }\n  [data-star^='1.3']::after {\n    width: 26%;\n  }\n  [data-star^='1.4']::after {\n    width: 28%;\n  }\n  [data-star^='1.5']::after {\n    width: 30%;\n  }\n  [data-star^='1.6']::after {\n    width: 32%;\n  }\n  [data-star^='1.7']::after {\n    width: 34%;\n  }\n  [data-star^='1.8']::after {\n    width: 36%;\n  }\n  [data-star^='1.9']::after {\n    width: 38%;\n  }\n  [data-star^='2']::after {\n    width: 40%;\n  }\n  [data-star^='2.1']::after {\n    width: 42%;\n  }\n  [data-star^='2.2']::after {\n    width: 44%;\n  }\n  [data-star^='2.3']::after {\n    width: 46%;\n  }\n  [data-star^='2.4']::after {\n    width: 48%;\n  }\n  [data-star^='2.5']::after {\n    width: 50%;\n  }\n  [data-star^='2.6']::after {\n    width: 52%;\n  }\n  [data-star^='2.7']::after {\n    width: 54%;\n  }\n  [data-star^='2.8']::after {\n    width: 56%;\n  }\n  [data-star^='2.9']::after {\n    width: 58%;\n  }\n  [data-star^='3']::after {\n    width: 60%;\n  }\n  [data-star^='3.1']::after {\n    width: 62%;\n  }\n  [data-star^='3.2']::after {\n    width: 64%;\n  }\n  [data-star^='3.3']::after {\n    width: 66%;\n  }\n  [data-star^='3.4']::after {\n    width: 68%;\n  }\n  [data-star^='3.5']::after {\n    width: 70%;\n  }\n  [data-star^='3.6']::after {\n    width: 72%;\n  }\n  [data-star^='3.7']::after {\n    width: 74%;\n  }\n  [data-star^='3.8']::after {\n    width: 76%;\n  }\n  [data-star^='3.9']::after {\n    width: 78%;\n  }\n  [data-star^='4']::after {\n    width: 80%;\n  }\n  [data-star^='4.1']::after {\n    width: 82%;\n  }\n  [data-star^='4.2']::after {\n    width: 84%;\n  }\n  [data-star^='4.3']::after {\n    width: 86%;\n  }\n  [data-star^='4.4']::after {\n    width: 88%;\n  }\n  [data-star^='4.5']::after {\n    width: 90%;\n  }\n  [data-star^='4.6']::after {\n    width: 92%;\n  }\n  [data-star^='4.7']::after {\n    width: 94%;\n  }\n  [data-star^='4.8']::after {\n    width: 96%;\n  }\n  [data-star^='4.9']::after {\n    width: 98%;\n  }\n  [data-star^='5']::after {\n    width: 100%;\n  }\n`;\n"
+          },
+          {
+            "path": "components/Common/FooterLinks/Footerlinksstyled.js",
+            "source": "repo_scan",
+            "match_type": "intent",
+            "exists": true,
+            "content": "import styled from 'styled-components';\nimport getConfig from 'next/config';\nimport { imgsprite, transition, fontsfamily, calcsize, calcsizes } from '@/theme/custom/mixins';\nconst { publicRuntimeConfig } = getConfig();\n\nconst ShopConfidenceSprite = `\n  background: url(${publicRuntimeConfig.CDN_FOR_STATIC_DATA}/static/images/common/footerlinks/shop-confidence-new.png) left top no-repeat;\n`;\n\nexport default styled.div`\n  width: 100%;\n  float: left;\n  height: auto;\n  padding: 50px 0 40px 0;\n\n  @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n    padding: 30px 0;\n  }\n\n  h6 {\n    margin-bottom: 20px;\n  }\n\n  .ceoMessageLink {\n    font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '-')};\n    color: ${({ theme }) => theme.colors.graycolor2};\n    font-family: ${({ theme }) => theme.fonts.fontopensansmedium};\n    line-height: 26px;\n\n    ${transition()};\n\n    &:hover {\n      color: ${({ theme }) => theme.colors.primary2};\n      ${transition()};\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screensm}) {\n      font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 3, '-')};\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '-')};\n    }\n  }\n\n  .contactDetailsBox {\n    width: 345px;\n    float: left;\n    height: auto;\n\n    @media (max-width: ${({ theme }) => theme.container.screenlg}) {\n      width: 310px;\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n      width: 100%;\n      text-align: center;\n      border-bottom: solid 1px ${({ theme }) => theme.colors.graycolor4} !important;\n      padding: 0 0 30px 0;\n      margin: 0 0 25px 0 !important;\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      padding: 0;\n      margin: 0 !important;\n    }\n\n    h6 {\n      @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n        display: none;\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n        display: block;\n        text-align: left;\n        margin: 0;\n      }\n    }\n\n    .contactInfoBox {\n      width: 100%;\n      float: left;\n      position: relative;\n      padding: 0 0 0 45px;\n      margin: 5px 0 30px 0;\n\n      @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n        width: auto;\n        float: none;\n        display: inline-block;\n        margin: 0 65px 0 0;\n        text-align: left;\n\n        &:last-child {\n          margin: 0;\n        }\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screensm}) {\n        margin: 0 25px 0 0;\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n        margin: 0 0 20px 0;\n        float: left;\n        width: 100%;\n      }\n\n      .footerSprite {\n        width: 24px;\n        height: 26px;\n        display: block;\n        position: absolute;\n        left: 0;\n        top: 5px;\n        background: ${({ theme }) => theme.backgroundimage.headersprite};\n\n        &.phone {\n          ${imgsprite('-38px', '1px')};\n        }\n\n        &.email {\n          ${imgsprite('-38px', '-35px')};\n        }\n\n        &.help {\n          ${imgsprite('-38px', '-69px')};\n        }\n      }\n\n      p {\n        margin: 0;\n        line-height: 18px;\n        color: ${({ theme }) => theme.colors.graycolor6};\n\n        span {\n          font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '-')};\n          color: ${({ theme }) => theme.colors.graycolor2};\n          display: block;\n        }\n      }\n\n      &:hover {\n        p,\n        span {\n          color: ${({ theme }) => theme.colors.primary2};\n        }\n      }\n    }\n  }\n\n  .shortLinkBox {\n    width: 195px;\n    float: left;\n    height: auto;\n\n    @media (max-width: ${({ theme }) => theme.container.screenlg}) {\n      width: 165px;\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n      width: 180px;\n      margin-right: 5px;\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screensm}) {\n      width: 137px;\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      width: 100%;\n\n      + .shortLinkBox {\n        margin: 0;\n      }\n    }\n\n    h6 {\n      @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n        margin-bottom: 16px;\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screensm}) {\n        font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize)};\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n        margin-bottom: 0;\n      }\n    }\n\n    ul {\n      width: 100%;\n      float: left;\n      height: auto;\n\n      li {\n        padding: 0;\n\n        a {\n          font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '-')};\n          color: ${({ theme }) => theme.colors.graycolor2};\n          line-height: 26px;\n\n          @media (max-width: ${({ theme }) => theme.container.screensm}) {\n            font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 3, '-')};\n          }\n\n          @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n            font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '-')};\n          }\n\n          ${transition()};\n\n          &:hover {\n            color: ${({ theme }) => theme.colors.primary2};\n            ${transition()};\n          }\n        }\n      }\n    }\n  }\n\n  .customerReview {\n    width: 160px;\n    float: right;\n    height: auto;\n    text-align: center;\n\n    @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n      width: 21%;\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      width: 100%;\n      text-align: left;\n    }\n\n    h6 {\n      @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n        margin-bottom: 16px;\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screensm}) {\n        font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize)};\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n        margin-bottom: 0;\n      }\n    }\n\n    .yotpoReview {\n      width: 152px;\n      height: 138px;\n      float: left;\n      margin: 0;\n      ${ShopConfidenceSprite};\n      ${imgsprite('0', '-46px')};\n\n      @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n        float: none;\n        margin: 0 auto;\n        display: inline-block;\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n        text-align: center;\n      }\n\n      span {\n        display: block;\n        margin-top: 35px;\n        ${({ theme }) => fontsfamily(theme.fonts.fontopensansmedium, calcsize(theme.fontsize.fontbasesize, 2, '*'), theme.colors.white)}\n      }\n\n      .yotpoStar {\n        display: block;\n        height: 16px;\n        margin-top: 8px;\n      }\n    }\n\n    img {\n      margin: 0 0 20px 0;\n    }\n\n    p {\n      color: ${({ theme }) => theme.colors.graycolor2};\n      margin: 0;\n      padding: 15px 0 0;\n      display: block;\n      clear: both;\n      font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 2, '-')};\n    }\n  }\n\n  .paymentMethods {\n    width: 220px;\n    float: left;\n    height: auto;\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      width: 100%;\n    }\n\n    .paymentBox {\n      float: left;\n      text-align: left;\n      margin: 0;\n\n      i.faa {\n        @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n          display: inline-block;\n        }\n      }\n    }\n  }\n\n  hr {\n    margin: 10px 0 45px 0;\n    background: ${({ theme }) => theme.colors.graycolor4};\n\n    @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n      margin: 30px 0;\n    }\n\n    @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n      margin: 3px 0 30px;\n    }\n  }\n\n  .copyrightBox {\n    width: 100%;\n    float: left;\n    height: auto;\n    position: relative;\n\n    .stayConnectedBox {\n      width: 370px;\n      float: left;\n      height: auto;\n      margin: 5px 0 0 0;\n\n      @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n        width: auto;\n      }\n\n      @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n        width: 100%;\n        margin: 0;\n        text-align: center;\n      }\n\n      h6 {\n        margin: 0 30px 0 0;\n        display: inline-block;\n        vertical-align: middle;\n        font-family: ${({ theme }) => theme.fonts.fontopensansregular};\n        font-size: ${({ theme }) => theme.fontsize.fontbasesizes};\n        color: ${({ theme }) => theme.colors.textbox2};\n\n        @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n          margin: 0 10px 0 0;\n        }\n\n        @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n          display: none;\n        }\n      }\n\n      a {\n        margin: 0 20px 0 0;\n        font-size: ${({ theme }) => calcsize(theme.fontsize.fontbasesize, 6, '+')};\n        vertical-align: middle;\n        color: ${({ theme }) => theme.colors.graycolor2};\n        ${transition()};\n\n        @media (max-width: ${({ theme }) => theme.container.screensm}) {\n          margin: 0 10px 0 0;\n        }\n\n        @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n          margin: 0 23px 0 0;\n        }\n\n        &:hover {\n          color: ${({ theme }) => theme.colors.primary2};\n          ${transition()};\n        }\n\n        &:last-child {\n          margin: 0;\n        }\n\n        .faa {\n          font-family: ${({ theme }) => theme.fonts.fonticon};\n        }\n      }\n    }\n    .OurBlogLink {\n      float: right;\n      @media (max-width: ${({ theme }) => theme.container.screenxs}) {\n        display: block;\n      }\n    }\n    .copyrightText {\n      float: left;\n      position: absolute;\n      top: 40px;\n      left: 0;\n\n      @media (max-width: ${({ theme }) => theme.container.screenmd}) {\n        position: inherit;\n        top: 0;\n        text-align: center;\n        width: 100%;\n      }\n\n      p {\n  "
+          }
+        ],
+        "target_confidence": "low",
+        "needs_target_clarification": false,
+        "clarification_issues": [],
+        "allow_new_files": false
+      },
+      "technical_spec": {
+        "title": "UI Content Update In Footer Section",
+        "overview": "Update the text in the footer section by replacing 'Add us on social media?' with 'Raj chavda'. Ensure no layout issues and maintain original design requirements.",
+        "change_scope": "short",
+        "change_type": "ui_copy",
+        "backend_needed": false,
+        "acceptance_criteria": [
+          "The text 'Add us on social media?' is successfully removed.",
+          "The text 'Raj chavda' is correctly rendered in its place.",
+          "The update does not cause any layout distortion or text overflow in the footer or designated section.",
+          "The styling (font, size, alignment) of 'Raj chavda' matches the original design requirements."
+        ],
+        "frontend_tasks": [
+          {
+            "file_path": "components/Common/FooterLinks/FooterLinks.js",
+            "edit_rule": "{\"path\": \"FooterLinks.js\", \"search\": \"Add us on social media?\", \"replace\": \"Raj chavda\"}"
+          },
+          {
+            "file_path": "components/Common/NewFooter/NewFooter.js",
+            "edit_rule": "{\"path\": \"NewFooter.js\", \"search\": \"Add us on social media?\", \"replace\": \"Raj chavda\"}"
+          },
+          {
+            "file_path": "components/Common/Footer/Footer.js",
+            "edit_rule": "{\"path\": \"Footer.js\", \"search\": \"Add us on social media?\", \"replace\": \"Raj chavda\"}"
+          },
+          {
+            "file_path": "components/Common/FooterLinks/FooterLinksData.js",
+            "edit_rule": "{\"path\": \"FooterLinksData.js\", \"search\": \"Add us on social media?\", \"replace\": \"Raj chavda\"}"
+          }
+        ],
+        "backend_tasks": [],
+        "data_model": {
+          "entities": [],
+          "fields": []
+        },
+        "api_contracts": [],
+        "rollout_notes": "The changes in FooterLinks.js, NewFooter.js, Footer.js, and FooterLinksData.js will be verified to ensure no layout issues and that the text 'Raj chavda' is correctly rendered."
+      },
+      "test_cases": [
+        {
+          "id": "TC-001",
+          "title": "Verify text removal and replacement in footer links component",
+          "type": "visual",
+          "priority": "P2",
+          "preconditions": [
+            "FooterLinks.js contains 'Add us on social media?'"
+          ],
+          "steps": [
+            "Open the application and navigate to a page with a footer.",
+            "Check that the text 'Add us on social media?' is present in the FooterLinks component.",
+            "Run the test case and replace all occurrences of 'Add us on social media?' with 'Raj chavda' in the specified files.",
+            "Verify that the text 'Add us on social media?' has been removed from the footer links.",
+            "Verify that the text 'Raj chavda' is correctly rendered in its place."
+          ],
+          "expected": "The text 'Add us on social media?' is successfully removed and replaced with 'Raj chavda'. No layout issues or overflow occur, and the styling matches the original design requirements."
+        },
+        {
+          "id": "TC-002",
+          "title": "Verify no layout distortion in footer after update",
+          "type": "visual",
+          "priority": "P2",
+          "preconditions": [
+            "FooterLinks.js contains 'Add us on social media?' and the application has a responsive design"
+          ],
+          "steps": [
+            "Open the application and navigate to a page with a responsive footer.",
+            "Check that the text 'Add us on social media?' is present in the Footer component.",
+            "Run the test case and replace all occurrences of 'Add us on social media?' with 'Raj chavda' in the specified files.",
+            "Verify that no layout distortion or overflow occurs after the update."
+          ],
+          "expected": "No layout distortion or overflow occurs in the footer after updating the text. The styling matches the original design requirements."
+        },
+        {
+          "id": "TC-003",
+          "title": "Verify correct font, size, and alignment of new text 'Raj chavda'",
+          "type": "visual",
+          "priority": "P2",
+          "preconditions": [
+            "FooterLinks.js contains 'Add us on social media?' and the application has a consistent design"
+          ],
+          "steps": [
+            "Open the application and navigate to a page with a footer.",
+            "Check that the text 'Add us on social media?' is present in the Footer component.",
+            "Run the test case and replace all occurrences of 'Add us on social media?' with 'Raj chavda' in the specified files.",
+            "Verify that the font, size, and alignment of the new text 'Raj chavda' match the original design requirements."
+          ],
+          "expected": "The font, size, and alignment of the new text 'Raj chavda' match the original design requirements after the update."
+        }
+      ],
+      "test_suite_name": "UI Content Update In Footer Section Test Suite",
+      "gate_1_approved": null,
+      "gate_1_feedback": null,
+      "frontend_code": null,
+      "backend_code": null,
+      "test_code": null,
+      "workspace_files": [],
+      "code_review": null,
+      "test_execution": null,
+      "execution_report": null,
+      "gate_2_approved": null,
+      "gate_2_feedback": null,
+      "error": null,
+      "failure": null,
+      "agent_logs": [
+        {
+          "agent": "A1",
+          "name": "Knowledge Agent",
+          "status": "completed",
+          "started_at": "2026-06-25T14:30:15.721Z",
+          "completed_at": "2026-06-25T14:31:52.960Z",
+          "output_summary": "short scope · backend no — Update the text in the footer section to personalize the branding by replacing '"
+        },
+        {
+          "agent": "A2",
+          "name": "Dev Plan Agent",
+          "status": "completed",
+          "started_at": "2026-06-25T14:31:52.973Z",
+          "completed_at": "2026-06-25T14:33:04.196Z",
+          "output_summary": "short · backend no — Update the text in the footer section by replacing 'Add us on social media?' wit"
+        },
+        {
+          "agent": "A3",
+          "name": "Test Case Agent",
+          "status": "completed",
+          "started_at": "2026-06-25T14:33:04.204Z",
+          "completed_at": "2026-06-25T14:34:43.266Z",
+          "output_summary": "3 cases · short scope"
+        }
+      ],
+      "created_at": "2026-06-25T14:30:15.705Z",
+      "updated_at": "2026-06-25T14:40:34.645Z",
+      "active_agents": []
+    }
+  ]
 }
