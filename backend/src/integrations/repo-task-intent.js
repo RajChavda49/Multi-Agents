@@ -1,5 +1,5 @@
 import { chatJsonPlanning } from "../orchestrator/llm.js";
-import { formatJiraBlock } from "../orchestrator/prompt-format.js";
+import { formatJiraContext } from "../orchestrator/prompt-format.js";
 import { getRetryPromptContext } from "../orchestrator/retry-context.js";
 
 const SYSTEM = `You are a task interpreter for a software repo search step.
@@ -24,7 +24,8 @@ Rules:
 - If the task is ambiguous, say so in intent_summary but still pick the most likely ui_area.`;
 
 export async function inferTaskSearchIntent(jiraTask, retryFeedback = "", pipelineId = null) {
-  const user = `${getRetryPromptContext({ retry_feedback: retryFeedback })}${formatJiraBlock(jiraTask)}
+  const jira = formatJiraContext(jiraTask);
+  const user = `${getRetryPromptContext({ retry_feedback: retryFeedback })}${jira.text}
 
 Interpret this ticket for repo search. Do not assume file paths — infer intent from title + description.`;
 
@@ -34,6 +35,7 @@ Interpret this ticket for repo search. Do not assume file paths — infer intent
       pipeline_id: pipelineId,
       num_predict: 480,
       num_ctx: 3072,
+      images: jira.images,
     });
     return normalizeTaskIntent(raw, jiraTask);
   } catch (err) {

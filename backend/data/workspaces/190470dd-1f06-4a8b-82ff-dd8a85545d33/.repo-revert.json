@@ -1,0 +1,17 @@
+{
+  "src/components/global-header/index.js": {
+    "path": "src/components/global-header/index.js",
+    "existed": true,
+    "content": "// src/components/global-header/index.js\nimport React from 'react';\nimport styled from 'styled-components';\n\nconst HeaderContainer = styled.header`\n  display: flex;\n  justify-content: space-between;\n  align-items: center;\n  padding: 1rem;\n  background-color: #333;\n  color: white;\n`;\n\nconst BrandName = styled.h1`\n  font-size: 1.5rem;\n  margin: 0;\n`;\n\nconst NavLinks = styled.nav`\n  display: flex;\n  gap: 1rem;\n`;\n\nconst NavLink = styled.a`\n  color: white;\n  text-decoration: none;\n  &:hover {\n    text-decoration: underline;\n  }\n`;\n\nconst GlobalHeader = () => {\n  return (\n    <HeaderContainer>\n      <BrandName>Raj chavda the developer</BrandName>\n      <NavLinks>\n        <NavLink href='#'>Home</NavLink>\n        <NavLink href='#'>About</NavLink>\n        <NavLink href='#'>Contact</NavLink>\n      </NavLinks>\n    </HeaderContainer>\n  );\n};\n\nexport default GlobalHeader;\n"
+  },
+  "__tests__/components/global-header.test.js": {
+    "path": "__tests__/components/global-header.test.js",
+    "existed": false,
+    "content": null
+  },
+  "__tests__/components/global-footer.test.js": {
+    "path": "__tests__/components/global-footer.test.js",
+    "existed": false,
+    "content": null
+  }
+}

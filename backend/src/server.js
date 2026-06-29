@@ -31,6 +31,10 @@ async function start() {
     console.log(
       `GitLab repo: ${repo.connected ? repo.path : "configured, not cloned yet"} (${repo.project_path || "?"})`,
     );
+  } else if (repo.source === "github") {
+    console.log(
+      `GitHub repo: ${repo.connected ? repo.path : "configured, not cloned yet"} (${repo.project_path || "?"})`,
+    );
   } else {
     console.log(`Target repo: ${repo.connected ? repo.path : repo.configured ? repo.error : "not configured"}`);
   }

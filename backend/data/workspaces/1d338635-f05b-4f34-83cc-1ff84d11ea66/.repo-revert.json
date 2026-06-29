@@ -1,0 +1,12 @@
+{
+  "src/components/Footer/index.js": {
+    "path": "src/components/Footer/index.js",
+    "existed": false,
+    "content": null
+  },
+  "__tests__/Footer.test.js": {
+    "path": "__tests__/Footer.test.js",
+    "existed": false,
+    "content": null
+  }
+}

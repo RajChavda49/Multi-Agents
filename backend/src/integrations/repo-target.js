@@ -3,64 +3,101 @@ import path from "path";
 import { execSync } from "child_process";
 import { config } from "../config.js";
 import {
-  isGitLabConfigured,
-  getGitLabClonePath,
-  syncGitLabRepository,
-  checkoutPipelineBranch,
-  commitPushAndCreateMr,
-  getGitLabStatus,
-} from "./gitlab-client.js";
+  getRemoteRepoProvider,
+  getRemoteClonePath,
+  getRemoteRepoStatus,
+  syncRemoteRepository,
+  checkoutRemotePipelineBranch,
+  commitPushAndCreateMergeRequest,
+  isRemoteRepoConfigured,
+} from "./remote-repo.js";
+import { isGitLabConfigured, getGitLabClonePath } from "./gitlab-client.js";
+import { isGitHubConfigured, getGitHubClonePath } from "./github-client.js";
+
+function isClonedRepo(dir) {
+  return Boolean(dir && fs.existsSync(path.join(dir, ".git")));
+}
 
 export function getEffectiveRepoPath() {
   if (isGitLabConfigured()) {
-    return getGitLabClonePath();
+    const gitlabPath = getGitLabClonePath();
+    if (isClonedRepo(gitlabPath)) return gitlabPath;
+  }
+  if (isGitHubConfigured()) {
+    const githubPath = getGitHubClonePath();
+    if (isClonedRepo(githubPath)) return githubPath;
   }
   if (config.targetRepo.path) {
-    return path.resolve(config.targetRepo.path);
+    const local = path.resolve(config.targetRepo.path);
+    if (fs.existsSync(local)) return local;
   }
   return null;
 }
 
 export function isRepoWriteEnabled() {
   if (isGitLabConfigured()) return config.gitlab.writeEnabled;
+  if (isGitHubConfigured()) return config.github.writeEnabled;
   return config.targetRepo.writeEnabled;
 }
 
-export function getCombinedRepoStatus() {
-  if (isGitLabConfigured()) {
-    const gitlab = getGitLabStatus();
-    const clonePath = gitlab.clone_path;
-    const connected = gitlab.cloned && fs.existsSync(clonePath);
-    let name;
-    let stack;
+function describeConnectedRepo(clonePath) {
+  let name;
+  let stack;
 
-    if (connected) {
-      try {
-        const raw = fs.readFileSync(path.join(clonePath, "package.json"), "utf-8");
-        const pkg = JSON.parse(raw);
-        name = pkg?.name || path.basename(clonePath);
-        const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
-        stack = [];
-        if (deps?.next) stack.push("next.js");
-        if (deps?.react) stack.push("react");
-        if (deps?.express) stack.push("express");
-        if (deps?.vite) stack.push("vite");
-        if (stack.length === 0) stack.push("node.js");
-      } catch {
-        name = path.basename(clonePath);
-        stack = ["unknown"];
-      }
+  if (clonePath && fs.existsSync(clonePath)) {
+    try {
+      const raw = fs.readFileSync(path.join(clonePath, "package.json"), "utf-8");
+      const pkg = JSON.parse(raw);
+      name = pkg?.name || path.basename(clonePath);
+      const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
+      stack = [];
+      if (deps?.next) stack.push("next.js");
+      if (deps?.react) stack.push("react");
+      if (deps?.express) stack.push("express");
+      if (deps?.vite) stack.push("vite");
+      if (stack.length === 0) stack.push("node.js");
+    } catch {
+      name = path.basename(clonePath);
+      stack = ["unknown"];
     }
+  }
+
+  return { name, stack };
+}
+
+export function getCombinedRepoStatus() {
+  const remote = getRemoteRepoStatus();
+  if (remote.configured) {
+    const clonePath = remote.clone_path;
+    const remoteConnected = remote.cloned && fs.existsSync(clonePath);
+    const effectivePath = getEffectiveRepoPath();
+    const usingLocalFallback =
+      !remoteConnected &&
+      effectivePath &&
+      config.targetRepo.path &&
+      path.resolve(config.targetRepo.path) === effectivePath;
+
+    const { name, stack } = describeConnectedRepo(
+      remoteConnected ? clonePath : usingLocalFallback ? effectivePath : null,
+    );
 
     return {
-      source: "gitlab",
+      source: usingLocalFallback ? "local" : remote.provider,
       configured: true,
-      connected,
-      path: clonePath,
+      connected: remoteConnected || usingLocalFallback,
+      path: remoteConnected ? clonePath : usingLocalFallback ? effectivePath : clonePath,
       name,
       stack,
-      ...gitlab,
-      write_enabled: config.gitlab.writeEnabled,
+      ...remote,
+      remote_provider: remote.provider,
+      remote_connected: remoteConnected,
+      using_local_fallback: usingLocalFallback,
+      write_enabled: usingLocalFallback
+        ? config.targetRepo.writeEnabled
+        : remote.provider === "gitlab"
+          ? config.gitlab.writeEnabled
+          : config.github.writeEnabled,
+      create_mr: remote.provider === "gitlab" ? remote.create_mr : remote.create_pr,
     };
   }
 
@@ -69,7 +106,7 @@ export function getCombinedRepoStatus() {
     return {
       source: "none",
       configured: false,
-      message: "Set GITLAB_* or TARGET_REPO_PATH in backend/.env",
+      message: "Set GITHUB_*, GITLAB_*, or TARGET_REPO_PATH in backend/.env",
     };
   }
 
@@ -91,12 +128,12 @@ function runGit(cmd, cwd) {
 }
 
 export async function ensureRepoReady(pipeline) {
-  if (isGitLabConfigured()) {
-    await syncGitLabRepository();
-    const branch = checkoutPipelineBranch(pipeline);
+  if (isRemoteRepoConfigured()) {
+    await syncRemoteRepository();
+    const branch = checkoutRemotePipelineBranch(pipeline);
     return {
-      source: "gitlab",
-      path: getGitLabClonePath(),
+      source: getRemoteRepoProvider(),
+      path: getRemoteClonePath(),
       branch,
     };
   }
@@ -110,19 +147,27 @@ export async function ensureRepoReady(pipeline) {
 }
 
 export async function publishPipelineChanges(pipeline) {
-  if (!isGitLabConfigured() || !config.gitlab.writeEnabled) {
-    return { skipped: true, reason: "GitLab write disabled or not configured" };
+  const provider = getRemoteRepoProvider();
+  if (!provider) {
+    return { skipped: true, reason: "Remote repo not configured" };
+  }
+
+  const writeEnabled = provider === "gitlab" ? config.gitlab.writeEnabled : config.github.writeEnabled;
+  if (!writeEnabled) {
+    return { skipped: true, reason: `${provider} write disabled` };
   }
 
   const jiraKey = pipeline.jira_task?.key || pipeline.id.slice(0, 8);
   const branch = pipeline.git_branch || `sdlc/${jiraKey}`;
   const title = `SDLC Agents: ${jiraKey} — ${pipeline.jira_task?.summary || "automated changes"}`;
 
-  return commitPushAndCreateMr({
+  return commitPushAndCreateMergeRequest({
     branch,
     title,
+    jiraKey,
     description: [
       `Automated changes from SDLC Agents pipeline \`${pipeline.id}\`.`,
+      `Jira task: **${jiraKey}**`,
       pipeline.gate_2_feedback ? `Gate 2 note: ${pipeline.gate_2_feedback}` : null,
       pipeline.execution_report?.overview || null,
     ]
@@ -145,3 +190,5 @@ export function getRepoGitInfo() {
     return null;
   }
 }
+
+export { isRemoteRepoConfigured, getRemoteRepoProvider, getRemoteClonePath };

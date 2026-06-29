@@ -6,6 +6,7 @@ import {
   findVerbatimAnchors,
   resolveSearchBlock,
 } from "./patch-resolve.js";
+import { buildPatchFailureContext, PatchApplyError, addLineNumbers } from "./patch-context.js";
 
 function resolveEditPath(editPath, hintPaths = []) {
   const rel = normalizeRelPath(editPath);
@@ -40,7 +41,7 @@ export function normalizeRelPath(filePath) {
   if (repo && rel.startsWith(repo)) {
     rel = rel.slice(repo.length).replace(/^\//, "");
   }
-  return rel.replace(/^\/+/, "");
+  return rel.replace(/^\/+/, "").replace(/^\.\/+/, "");
 }
 
 export function fileExistsInRepo(relPath) {
@@ -151,6 +152,7 @@ export function formatEditTargetsForPrompt(knowledge, options = {}) {
   // Provide a generous excerpt so the model can write exact search strings
   const maxCharsPerFile = options.maxCharsPerFile ?? Math.min(limits.maxCharsPerFile + 2000, 5000);
   const includeContent = options.includeContent !== false;
+  const fullFilePaths = new Set((options.fullFilePaths || []).map((p) => normalizeRelPath(p)));
 
   const targets = (knowledge?.edit_targets || [])
     .filter((t) => t.exists !== false)
@@ -158,6 +160,19 @@ export function formatEditTargetsForPrompt(knowledge, options = {}) {
     .slice(0, maxFiles);
 
   if (!targets.length) {
+    if (knowledge?.allow_new_files === true) {
+      const modules = (knowledge?.relevant_modules || []).slice(0, 6);
+      const hints = (knowledge?.suggested_new_file_paths || []).slice(0, 4);
+      return {
+        files_to_change: hints,
+        existing_files: [],
+        patch_mode: false,
+        allow_new_files: true,
+        suggested_modules: modules,
+        rule:
+          "No existing files matched — create NEW files. Use paths under suggested_modules (match repo layout). Return { files: [{ path, content }] } for new files.",
+      };
+    }
     return {
       files_to_change: [],
       existing_files: [],
@@ -170,8 +185,10 @@ export function formatEditTargetsForPrompt(knowledge, options = {}) {
     files_to_change: targets.map((t) => t.path),
     allow_new_files: knowledge.allow_new_files === true,
     patch_mode: true,
-    rule:
-      'Return ONLY { "edits": [{"path", "search", "replace"}] }. Copy "search" VERBATIM from verbatim_anchors or the excerpt (full line, including JSX/tags). Change ONLY the minimum needed.',
+    existing_paths: targets.map((t) => t.path),
+    rule: knowledge.allow_new_files
+      ? 'EXISTING paths → {"edits":[{path,search,replace}]} only (minimal patch). NEW paths (not in repo) → {"files":[{path,content}]} with full code. Never put an existing path in "files".'
+      : 'Return ONLY { "edits": [{"path", "search", "replace"}] }. Copy "search" VERBATIM from verbatim_anchors or the excerpt. Change ONLY the minimum needed.',
   };
 
   const searchPhrases = [
@@ -183,10 +200,21 @@ export function formatEditTargetsForPrompt(knowledge, options = {}) {
     result.existing_files = targets.map((t) => {
       const raw = t.content || readRepoFile(t.path, 0) || "";
       const anchors = findVerbatimAnchors(raw, searchPhrases);
+      const useFull = fullFilePaths.has(normalizeRelPath(t.path));
       const entry = {
         path: t.path,
-        excerpt: excerptFileForCoding(raw, t.path, maxCharsPerFile, { phrases: searchPhrases }),
       };
+      if (useFull) {
+        let numbered = addLineNumbers(raw);
+        if (numbered.length > 14000) {
+          numbered = numbered.slice(0, 14000) + "\n/* …truncated — use visible line numbers … */";
+        }
+        entry.numbered_source = numbered;
+        entry.instruction =
+          'Copy ONE complete line from numbered_source as "search" (character-for-character, including indentation).';
+      } else {
+        entry.excerpt = excerptFileForCoding(raw, t.path, maxCharsPerFile, { phrases: searchPhrases });
+      }
       if (anchors.length) {
         entry.verbatim_anchors = anchors;
       }
@@ -206,6 +234,7 @@ export function applyEditsToRepo(edits, options = {}) {
   const files = [];
   const seen = new Map();
   const pathHints = options.pathHints || [];
+  const searchPhrases = options.searchPhrases || [];
 
   for (const edit of edits || []) {
     const rel = resolveEditPath(edit.path, pathHints);
@@ -230,8 +259,10 @@ export function applyEditsToRepo(edits, options = {}) {
 
     const resolved = resolveSearchBlock(original, rawSearch, rawReplace);
     if (!resolved) {
-      throw new Error(
-        `applyEditsToRepo: search block not found in ${rel} — copy an exact line from verbatim_anchors or the excerpt`,
+      const ctx = buildPatchFailureContext(rel, original, rawSearch, searchPhrases);
+      throw new PatchApplyError(
+        `applyEditsToRepo: search block not found in ${rel} — ${ctx.recovery_hint}`,
+        ctx,
       );
     }
 
@@ -268,7 +299,7 @@ export function applyEditsToRepo(edits, options = {}) {
   }
 
   for (const [filePath, content] of seen) {
-    files.push({ path: filePath, content });
+    files.push({ path: filePath, content, write_mode: "patch_result" });
   }
 
   return files;
@@ -312,6 +343,20 @@ export function resolveEditTargets(knowledge) {
 }
 
 export function assessEditTargetConfidence(knowledge, jiraTask) {
+  if (knowledge?.user_target_decision_made) {
+    const editTargets = resolveEditTargets(knowledge);
+    const existing = editTargets.filter((t) => t.exists);
+    return {
+      confidence:
+        knowledge.target_confidence ||
+        (existing.length ? "medium" : knowledge.allow_new_files ? "low" : "none"),
+      needs_clarification: false,
+      edit_targets: existing.length ? existing.slice(0, 4) : editTargets,
+      clarification_issues: [],
+      clarification_mode: null,
+    };
+  }
+
   const editTargets = resolveEditTargets(knowledge);
   const existing = editTargets.filter((t) => t.exists);
   const primary = existing.filter((t) => targetRank(t, knowledge) < 5);
@@ -325,22 +370,56 @@ export function assessEditTargetConfidence(knowledge, jiraTask) {
     /\bexisting\b|\breplace\b|\bupdate\b|\bedit\b|\bcurrent\b/.test(desc) ||
     knowledge?.change_scope === "short";
 
+  const isGreenfield =
+    knowledge?.change_type === "full_feature" ||
+    knowledge?.change_scope === "long" ||
+    /\bnew\s+(page|feature|component|landing|section)\b/i.test(desc);
+
   if (!knowledge?.repo_connected) {
+    if (isGreenfield) {
+      return {
+        confidence: "low",
+        needs_clarification: false,
+        edit_targets: editTargets,
+        clarification_issues: [],
+        allow_new_files: true,
+        clarification_mode: null,
+      };
+    }
     return {
       confidence: "none",
       needs_clarification: true,
       edit_targets: editTargets,
       clarification_issues: ["No codebase connected — cannot locate files to edit."],
+      clarification_mode: "no_repo",
     };
   }
 
+  if (strongMatches.length > 0 && existing.length > 0) {
+    return {
+      confidence: strongMatches.length >= 2 ? "high" : "medium",
+      needs_clarification: false,
+      edit_targets: primary.length ? primary : existing.slice(0, 4),
+      clarification_issues: [],
+      clarification_mode: null,
+    };
+  }
+
+  let clarification_mode = null;
+
   if (existing.length === 0) {
+    clarification_mode = "no_files_matched";
     issues.push("No existing repo files were confidently matched for this task.");
     if (impliesExisting) {
-      issues.push("The Jira ticket describes editing existing UI — creating new files is likely wrong.");
+      issues.push(
+        "The ticket may refer to existing UI — choose whether to edit specific files or create new ones.",
+      );
+    } else {
+      issues.push("Choose whether agents should create new files or edit specific existing paths.");
     }
-  } else if (strongMatches.length === 0 && existing.length > 0) {
-    issues.push("Matched files are weak — please confirm the correct edit targets.");
+  } else if (strongMatches.length === 0) {
+    clarification_mode = "weak_match";
+    issues.push("Matched files are weak — confirm paths or allow new file creation.");
   }
 
   const hallucinated = editTargets.filter((t) => !t.exists && t.source === "a1_ref");
@@ -350,18 +429,19 @@ export function assessEditTargetConfidence(knowledge, jiraTask) {
     );
   }
 
-  const needs_clarification =
-    primary.length === 0 || (impliesExisting && strongMatches.length === 0 && primary.length === 0);
+  const needs_clarification = Boolean(clarification_mode);
 
   let confidence = "high";
-  if (primary.length === 0) confidence = "none";
+  if (primary.length === 0) confidence = existing.length ? "medium" : "none";
   else if (needs_clarification || primary.length > 3) confidence = "low";
 
   return {
     confidence,
-    needs_clarification: primary.length === 0 || (impliesExisting && primary.length === 0),
+    needs_clarification,
     edit_targets: primary.length ? primary : existing.length ? existing.slice(0, 4) : editTargets,
     clarification_issues: issues,
+    clarification_mode,
+    requires_create_decision: clarification_mode === "no_files_matched",
   };
 }
 
@@ -373,7 +453,9 @@ export function enrichKnowledgeContext(knowledge, jiraTask) {
     target_confidence: assessment.confidence,
     needs_target_clarification: assessment.needs_clarification,
     clarification_issues: assessment.clarification_issues,
-    allow_new_files: knowledge.allow_new_files === true,
+    clarification_mode: assessment.clarification_mode,
+    requires_create_decision: assessment.requires_create_decision === true,
+    allow_new_files: knowledge.allow_new_files === true || assessment.allow_new_files === true,
   };
 }
 
@@ -385,15 +467,18 @@ export function applyUserTargetConfirmation(knowledge, decision = {}, jiraTask =
     .filter(Boolean);
 
   const confirmed = [...new Set(paths)].filter((p) => fileExistsInRepo(p));
+  const newFileHints = [...new Set(paths)].filter((p) => !fileExistsInRepo(p));
 
   return enrichKnowledgeContext(
     {
       ...knowledge,
       user_confirmed_targets: confirmed,
+      suggested_new_file_paths: newFileHints.length ? newFileHints : knowledge.suggested_new_file_paths,
       allow_new_files: decision.allow_new_files === true,
       user_target_notes: decision.notes || decision.feedback || null,
+      user_target_decision_made: true,
       needs_target_clarification: false,
-      target_confidence: confirmed.length ? "high" : knowledge.target_confidence,
+      target_confidence: confirmed.length ? "high" : decision.allow_new_files ? "low" : knowledge.target_confidence,
     },
     jiraTask,
   );

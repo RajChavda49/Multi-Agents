@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import StatusBadge from "./StatusBadge.js";
 import AgentTimeline from "./AgentTimeline.js";
 import { api } from "../api.js";
+import { formatRunningLabel } from "../lib/agent-details.js";
+import PipelineLogs from "./PipelineLogs.js";
 
 function Section({ title, children }) {
   return (
@@ -13,38 +15,6 @@ function Section({ title, children }) {
       </div>
       <div className="p-4 text-sm">{children}</div>
     </section>
-  );
-}
-
-function JsonBlock({ data }) {
-  if (!data) return <p className="text-slate-500 italic">Not generated yet.</p>;
-  return (
-    <pre className="text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed max-h-96">
-      {JSON.stringify(data, null, 2)}
-    </pre>
-  );
-}
-
-function CodeFilesBlock({ codeBundle, label }) {
-  if (!codeBundle?.files?.length) {
-    return <p className="text-slate-500 italic">No {label} files yet.</p>;
-  }
-  return (
-    <div className="space-y-3">
-      {codeBundle.files.map((file) => (
-        <div
-          key={file.path}
-          className="rounded-lg border border-slate-700 overflow-hidden"
-        >
-          <div className="px-3 py-1.5 bg-slate-800 text-xs font-mono text-blue-300">
-            {file.path}
-          </div>
-          <pre className="p-3 text-xs text-slate-300 overflow-x-auto max-h-48">
-            {file.content}
-          </pre>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -137,6 +107,7 @@ function ClarifyPanel({
   description,
   issues,
   suggestedFiles,
+  clarificationMode,
   targetPaths,
   setTargetPaths,
   allowNewFiles,
@@ -146,6 +117,29 @@ function ClarifyPanel({
   loading,
   onConfirm,
 }) {
+  const noFilesMatched = clarificationMode === "no_files_matched";
+  const [fileDecision, setFileDecision] = useState(null);
+
+  useEffect(() => {
+    if (!noFilesMatched) return;
+    if (allowNewFiles) setFileDecision("create");
+    else if (targetPaths.trim()) setFileDecision("edit");
+  }, [noFilesMatched, allowNewFiles, targetPaths]);
+
+  function selectCreate() {
+    setFileDecision("create");
+    setAllowNewFiles(true);
+  }
+
+  function selectEdit() {
+    setFileDecision("edit");
+    setAllowNewFiles(false);
+  }
+
+  const canConfirm = noFilesMatched
+    ? fileDecision === "create" || (fileDecision === "edit" && targetPaths.trim())
+    : Boolean(targetPaths.trim()) || allowNewFiles;
+
   return (
     <div className="rounded-xl border border-orange-500/40 bg-orange-950/30 p-5 space-y-3">
       <p className="text-orange-200 font-medium">{title}</p>
@@ -162,24 +156,68 @@ function ClarifyPanel({
           Suggested: {suggestedFiles.join(", ")}
         </p>
       )}
+
+      {noFilesMatched ? (
+        <div className="space-y-2 rounded-lg border border-orange-500/20 bg-slate-950/40 p-3">
+          <p className="text-xs text-slate-200 font-medium">How should agents proceed?</p>
+          <label className="flex items-start gap-2 text-xs text-slate-300 cursor-pointer">
+            <input
+              type="radio"
+              name="file-decision"
+              checked={fileDecision === "create"}
+              onChange={selectCreate}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium text-emerald-300">Create new file(s)</span>
+              <span className="block text-slate-500 mt-0.5">
+                Agents may add new components/pages (optional path hints below)
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-xs text-slate-300 cursor-pointer">
+            <input
+              type="radio"
+              name="file-decision"
+              checked={fileDecision === "edit"}
+              onChange={selectEdit}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium text-sky-300">Edit existing file(s)</span>
+              <span className="block text-slate-500 mt-0.5">
+                Specify repo-relative paths that already exist
+              </span>
+            </span>
+          </label>
+        </div>
+      ) : (
+        <label className="flex items-center gap-2 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={allowNewFiles}
+            onChange={(e) => setAllowNewFiles(e.target.checked)}
+            className="rounded"
+          />
+          Allow creating new files (only if no existing file fits)
+        </label>
+      )}
+
       <label className="block text-xs text-slate-300">
-        Files to edit (repo-relative paths, one per line)
+        {noFilesMatched && fileDecision === "create"
+          ? "Optional — where to create new files (repo-relative paths)"
+          : "Files to edit (repo-relative paths, one per line)"}
         <textarea
           value={targetPaths}
           onChange={(e) => setTargetPaths(e.target.value)}
           rows={3}
-          placeholder="components/Common/NewHeader/NewHeader.js"
+          placeholder={
+            noFilesMatched && fileDecision === "create"
+              ? "components/Home/HeroSection.js"
+              : "components/Common/NewHeader/NewHeader.js"
+          }
           className="mt-1 w-full rounded-lg bg-slate-900 border border-slate-600 px-3 py-2 text-sm font-mono"
         />
-      </label>
-      <label className="flex items-center gap-2 text-xs text-slate-300">
-        <input
-          type="checkbox"
-          checked={allowNewFiles}
-          onChange={(e) => setAllowNewFiles(e.target.checked)}
-          className="rounded"
-        />
-        Allow creating new files (only if no existing file fits)
       </label>
       <textarea
         value={notes}
@@ -190,10 +228,12 @@ function ClarifyPanel({
       />
       <button
         onClick={onConfirm}
-        disabled={loading || !targetPaths.trim()}
+        disabled={loading || !canConfirm}
         className="rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-4 py-2 text-sm font-medium"
       >
-        Confirm & continue
+        {noFilesMatched && fileDecision === "create"
+          ? "Create new files & continue"
+          : "Confirm & continue"}
       </button>
     </div>
   );
@@ -322,29 +362,7 @@ export default function PipelineDetail({
   const showRetry = canRetryPipeline(pipeline.status);
   const busy = loading || retrying;
   const isRunning = ["phase_1_running", "phase_2_running"].includes(pipeline.status);
-
-  const runningLabel = (() => {
-    const active = pipeline.active_agents || [];
-    if (active.length > 1) {
-      return `${active.join(", ")} generating code (Ollama — may take several minutes on CPU)…`;
-    }
-    if (active.length === 1) {
-      return `${active[0]} running via Ollama…`;
-    }
-    if (pipeline.current_agent === "A4-A6") {
-      return "A4–A6 generating code (Ollama — may take several minutes on CPU)…";
-    }
-    return pipeline.current_agent
-      ? `${pipeline.current_agent} running via Ollama…`
-      : "Agents running…";
-  })();
-  const showGeneratedCode = Boolean(pipeline.frontend_code);
-  const showPostGate2 =
-    pipeline.status === "awaiting_gate_2" ||
-    pipeline.status === "phase_2_complete" ||
-    pipeline.code_review ||
-    pipeline.test_execution ||
-    pipeline.execution_report;
+  const runningLabel = formatRunningLabel(pipeline);
 
   return (
     <div className="space-y-6">
@@ -384,6 +402,31 @@ export default function PipelineDetail({
 
       <AgentTimeline pipeline={pipeline} />
 
+      {pipeline.jira_task?.description_images?.length > 0 && (
+        <Section title="Jira description images">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {pipeline.jira_task.description_images.map((img) => (
+              <div
+                key={img.url || img.filename}
+                className="rounded-lg border border-slate-700 overflow-hidden bg-slate-950/40"
+              >
+                <img
+                  src={img.url}
+                  alt={img.alt_text || img.filename}
+                  className="w-full max-h-72 object-contain bg-slate-950"
+                />
+                <div className="p-3 text-xs space-y-1">
+                  <p className="font-mono text-slate-300">{img.filename}</p>
+                  {img.description && (
+                    <p className="text-slate-400 leading-relaxed">{img.description}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {isRunning && (
         <div className="rounded-xl border border-blue-500/40 bg-blue-950/30 px-4 py-3 flex items-center gap-3">
           <span className="h-2 w-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
@@ -420,7 +463,7 @@ export default function PipelineDetail({
       )}
 
       {(pipeline.git_branch || pipeline.git_publish?.merge_request) && (
-        <Section title="Git / GitLab">
+        <Section title={`Git / ${pipeline.repo_source === "github" ? "GitHub" : pipeline.repo_source === "gitlab" ? "GitLab" : "Remote"}`}>
           {pipeline.git_branch && (
             <p className="text-sm text-slate-300">
               Branch:{" "}
@@ -441,7 +484,7 @@ export default function PipelineDetail({
                 rel="noreferrer"
                 className="text-sky-400 hover:text-sky-300 underline"
               >
-                Open merge request
+                Open {pipeline.repo_source === "github" ? "pull request" : "merge request"}
               </a>
             </p>
           )}
@@ -455,9 +498,14 @@ export default function PipelineDetail({
 
       {awaitingTargetClarify && (
         <ClarifyPanel
-          title="❓ Confirm files to edit"
-          description="The agents could not confidently match existing repo files for this Jira task. Specify which files should be edited before planning continues."
+          title="❓ No matching files found"
+          description={
+            pipeline.knowledge_context?.requires_create_decision
+              ? "Agents could not find existing files for this task. Choose whether to create new files or point to specific existing paths, then planning will continue."
+              : "The agents could not confidently match existing repo files for this Jira task. Confirm paths or allow new file creation before planning continues."
+          }
           issues={pipeline.knowledge_context?.clarification_issues}
+          clarificationMode={pipeline.knowledge_context?.clarification_mode}
           suggestedFiles={(pipeline.knowledge_context?.edit_targets || []).map((t) => t.path)}
           targetPaths={targetPaths}
           setTargetPaths={setTargetPaths}
@@ -469,7 +517,7 @@ export default function PipelineDetail({
           onConfirm={() =>
             runGate(() =>
               api.confirmTargets(pipeline.id, {
-                confirmed_targets: targetPaths,
+                confirmed_targets: targetPaths.trim() || undefined,
                 allow_new_files: allowNewFiles,
                 notes: clarifyNotes || undefined,
               }),
@@ -508,7 +556,7 @@ export default function PipelineDetail({
       {awaitingGate1 && (
         <GatePanel
           title="🛑 Gate 1 — Review Spec & Test Plan"
-          description={`Approve to start Phase 2. Edit targets: ${
+          description={`Click A1–A3 in the pipeline above to review outputs. Approve to start Phase 2. Edit targets: ${
             (pipeline.knowledge_context?.edit_targets || [])
               .filter((t) => t.exists !== false)
               .map((t) => t.path)
@@ -531,77 +579,10 @@ export default function PipelineDetail({
         />
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Section title="A1 — Knowledge Context">
-          <JsonBlock data={pipeline.knowledge_context} />
-        </Section>
-        <Section title="A2 — Technical Spec">
-          <JsonBlock data={pipeline.technical_spec} />
-        </Section>
-      </div>
-
-      <Section
-        title={`A3 — Test Cases${pipeline.test_suite_name ? `: ${pipeline.test_suite_name}` : ""}`}
-      >
-        <JsonBlock data={pipeline.test_cases} />
-      </Section>
-
-      {showGeneratedCode && (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Section title="A4 — Frontend Code">
-              <CodeFilesBlock
-                codeBundle={pipeline.frontend_code}
-                label="frontend"
-              />
-            </Section>
-            <Section title="A5 — Backend Code">
-              <CodeFilesBlock
-                codeBundle={pipeline.backend_code}
-                label="backend"
-              />
-            </Section>
-            <Section title="A6 — Test Code">
-              <CodeFilesBlock codeBundle={pipeline.test_code} label="test" />
-            </Section>
-          </div>
-
-          {pipeline.workspace_files?.length > 0 && (
-            <Section title="Workspace Files">
-              <ul className="text-xs font-mono text-slate-400 space-y-1">
-                {pipeline.workspace_files.map((f) => (
-                  <li key={f.path}>
-                    {f.path}{" "}
-                    <span className="text-slate-600">({f.size} bytes)</span>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          )}
-        </>
-      )}
-
-      {showPostGate2 && (
-        <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Section title="A7 — Code Review">
-              <JsonBlock data={pipeline.code_review} />
-            </Section>
-            <Section title="A8 — Test Execution">
-              <JsonBlock data={pipeline.test_execution} />
-            </Section>
-          </div>
-
-          <Section title="A9 — Execution Report">
-            <JsonBlock data={pipeline.execution_report} />
-          </Section>
-        </>
-      )}
-
       {awaitingGate2 && (
         <GatePanel
           title="🛑 Gate 2 — Review Code, Tests & Report"
-          description="A7–A9 have finished. Review the code review (ESLint/syntax), test execution results, and execution report above. Approve to publish and proceed toward staging. Reject to stop the pipeline."
+          description="Click A4–A9 in the pipeline above to review code, tests, and reports. Approve to publish and open a PR/MR."
           feedback={feedback}
           setFeedback={setFeedback}
           loading={busy}
@@ -619,23 +600,7 @@ export default function PipelineDetail({
         />
       )}
 
-      {pipeline.agent_logs?.length > 0 && (
-        <Section title="Agent Logs">
-          <ul className="space-y-2">
-            {pipeline.agent_logs.map((log, i) => (
-              <li
-                key={i}
-                className="flex gap-3 text-xs font-mono text-slate-400"
-              >
-                <span className="text-slate-500">{log.agent}</span>
-                <span className="text-slate-300">{log.name}</span>
-                <span>{log.status}</span>
-                <span className="truncate">{log.output_summary}</span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
+      <PipelineLogs pipeline={pipeline} />
     </div>
   );
 }

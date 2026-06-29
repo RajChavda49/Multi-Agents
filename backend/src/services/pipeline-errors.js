@@ -40,6 +40,11 @@ export function buildFailureRecord(err, pipeline = {}) {
 }
 
 function inferFailedAgent(pipeline) {
+  const errMsg = pipeline.failure?.message || pipeline.error || "";
+  if (/asNode|Ambiguous update/i.test(errMsg)) {
+    return { agent: "GRAPH", model: null };
+  }
+
   const phase = pipeline.phase;
   if (phase === "planning") {
     if (!pipeline.knowledge_context) return { agent: "A1", model: config.reasoningModel };

@@ -98,7 +98,8 @@ export default function App() {
               }`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${repoConnected ? "bg-sky-400" : "bg-slate-600"}`} />
-              {repoSource === "gitlab" ? "GitLab" : "Repo"} {repoConnected ? "connected" : "offline"}
+              {repoSource === "gitlab" ? "GitLab" : repoSource === "github" ? "GitHub" : "Repo"}{" "}
+              {repoConnected ? "connected" : "offline"}
             </span>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 ${

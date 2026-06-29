@@ -128,6 +128,34 @@ export function resolveSearchBlock(original, rawSearch, rawReplace) {
     }
   }
 
+  // Trimmed single-line match
+  const trimmedSearch = search.trim();
+  if (trimmedSearch && trimmedSearch !== search) {
+    const trimmedResolved = resolveSearchBlock(original, trimmedSearch, replace);
+    if (trimmedResolved) return { ...trimmedResolved, strategy: "trimmed-exact" };
+  }
+
+  // First line of multiline search only
+  const firstLine = search.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
+  if (firstLine && firstLine.length >= 4 && search.includes("\n")) {
+    const lineMatches = original
+      .split("\n")
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => line.trim() === firstLine || line.includes(firstLine));
+
+    if (lineMatches.length === 1) {
+      const { line } = lineMatches[0];
+      const inner = stripWrapperQuotes(replace).trim();
+      let newLine = line;
+      if (line.includes(firstLine)) {
+        newLine = line.replace(firstLine, inner || replace.trim());
+      }
+      if (newLine !== line) {
+        return { search: line, replace: newLine, strategy: "first-line" };
+      }
+    }
+  }
+
   return null;
 }
 

@@ -6,6 +6,7 @@ import {
   getIssue,
   searchIssues,
 } from "../integrations/jira-client.js";
+import { resolveImageFile } from "../integrations/jira-images.js";
 
 const router = Router();
 
@@ -58,6 +59,18 @@ router.get("/tasks/:key", async (req, res) => {
   try {
     const issue = await getIssue(req.params.key.toUpperCase());
     res.json({ issue });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+router.get("/images/:issueKey/:filename", (req, res) => {
+  try {
+    const filePath = resolveImageFile(req.params.issueKey, req.params.filename);
+    if (!filePath) {
+      return res.status(404).json({ error: "Image not found" });
+    }
+    res.sendFile(filePath);
   } catch (err) {
     res.status(404).json({ error: err.message });
   }

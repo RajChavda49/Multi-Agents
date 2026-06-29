@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { fetchIssueDescriptionImages } from "./jira-images.js";
 
 function authHeader() {
   const token = Buffer.from(`${config.jira.email}:${config.jira.apiToken}`).toString("base64");
@@ -19,6 +20,8 @@ function normalizeSiteUrl(url) {
 function siteUrl() {
   return normalizeSiteUrl(config.jira.baseUrl);
 }
+
+export { siteUrl };
 
 function apiUrl(path) {
   return `${siteUrl()}/rest/api/3${path}`;
@@ -62,6 +65,26 @@ async function jiraRequest(path, options = {}) {
   return data;
 }
 
+export async function jiraFetchBinary(url) {
+  if (!isJiraConfigured()) {
+    throw new Error("Jira is not configured");
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "*/*",
+      Authorization: authHeader(),
+    },
+    signal: AbortSignal.timeout(60_000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Jira binary fetch ${response.status}`);
+  }
+
+  return Buffer.from(await response.arrayBuffer());
+}
+
 export function extractDescription(description) {
   if (!description) return "";
   if (typeof description === "string") return description;
@@ -73,6 +96,10 @@ export function extractDescription(description) {
       for (const node of nodes || []) {
         if (node.type === "text" && node.text) {
           lines.push(node.text);
+        }
+        if (node.type === "media" || node.type === "mediaSingle" || node.type === "mediaGroup") {
+          const alt = node.attrs?.alt || "embedded image";
+          lines.push(`[Image: ${alt}]`);
         }
         if (node.content) walk(node.content);
         if (node.type === "paragraph" || node.type === "heading") {
@@ -94,13 +121,14 @@ export function buildBrowseUrl(issueKey) {
   return `${base}/browse/${issueKey}`;
 }
 
-export function normalizeIssue(issue) {
+export function normalizeIssue(issue, extra = {}) {
   const fields = issue.fields || {};
 
   return {
     jira_key: issue.key,
     summary: fields.summary || "Untitled",
     description: extractDescription(fields.description),
+    description_images: extra.description_images || [],
     issue_type: fields.issuetype?.name || "Task",
     priority: fields.priority?.name || "Medium",
     status: fields.status?.name || "Unknown",
@@ -122,14 +150,31 @@ export async function testConnection() {
 
 export async function getIssue(issueKey) {
   const issue = await jiraRequest(
-    `/issue/${encodeURIComponent(issueKey)}?fields=summary,description,status,issuetype,priority,assignee,updated,created`,
+    `/issue/${encodeURIComponent(issueKey)}?fields=summary,description,status,issuetype,priority,assignee,updated,created,attachment`,
   );
-  return normalizeIssue(issue);
+
+  let description_images = [];
+  try {
+    description_images = await fetchIssueDescriptionImages(issue.key, {
+      attachments: issue.fields?.attachment || [],
+      rawDescription: issue.fields?.description,
+    });
+    if (description_images.length) {
+      console.log(
+        `[jira-images] ${issue.key}: fetched ${description_images.length} image(s) from description/attachments`,
+      );
+    }
+  } catch (err) {
+    console.warn(`[jira-images] ${issue.key}: ${err.message}`);
+  }
+
+  return normalizeIssue(issue, { description_images });
 }
 
 const ISSUE_FIELDS = [
   "summary",
   "description",
+  "attachment",
   "status",
   "issuetype",
   "priority",

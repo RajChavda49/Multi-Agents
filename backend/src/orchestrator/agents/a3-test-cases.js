@@ -1,7 +1,7 @@
 import { chatJsonPlanning } from "../llm.js";
 import { getRetryPromptContext } from "../retry-context.js";
 import { reportAgentActivity } from "../../services/pipeline-progress.js";
-import { formatJiraBlock, formatSpecForA3 } from "../prompt-format.js";
+import { formatJiraContext, formatSpecForA3 } from "../prompt-format.js";
 
 const SYSTEM = `You are A3 Test Case Agent. Create test cases from the technical specification.
 
@@ -30,7 +30,9 @@ export async function runA3TestCases(state) {
   const startedAt = new Date().toISOString();
   reportAgentActivity(state.pipeline_id, { current_agent: "A3" });
 
-  const user = `${getRetryPromptContext(state)}${formatJiraBlock(task)}
+  const jira = formatJiraContext(task);
+
+  const user = `${getRetryPromptContext(state)}${jira.text}
 
 === TECHNICAL SPEC ===
 ${JSON.stringify(formatSpecForA3(spec), null, 2)}
@@ -42,6 +44,7 @@ Generate test cases aligned with the spec.`;
     pipeline_id: state.pipeline_id,
     num_predict: 900,
     num_ctx: 4096,
+    images: jira.images,
   });
 
   return {

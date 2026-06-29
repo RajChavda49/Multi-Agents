@@ -7,3 +7,107 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ── Agent pipeline animations ── */
+
+@keyframes agent-orbit-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes agent-active-glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes agent-active-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.02); }
+}
+
+@keyframes agent-active-card {
+  0%, 100% { box-shadow: 0 0 20px rgba(34, 211, 238, 0.15); }
+  50% { box-shadow: 0 0 32px rgba(34, 211, 238, 0.35), 0 0 60px rgba(59, 130, 246, 0.15); }
+}
+
+@keyframes agent-gate-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(251, 191, 36, 0.2); }
+  50% { box-shadow: 0 0 24px rgba(251, 191, 36, 0.45); }
+}
+
+@keyframes agent-progress-shine {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+@keyframes agent-connector-flow {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+@keyframes agent-live-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.agent-orbit-ring {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    rgba(34, 211, 238, 0.9) 25%,
+    rgba(59, 130, 246, 0.9) 50%,
+    rgba(139, 92, 246, 0.9) 75%,
+    transparent 100%
+  );
+  animation: agent-orbit-spin 2.5s linear infinite;
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+}
+
+.agent-active-glow {
+  animation: agent-active-glow 2s ease-in-out infinite;
+}
+
+.agent-active-bounce {
+  animation: agent-active-bounce 2.5s ease-in-out infinite;
+}
+
+.agent-active-card {
+  animation: agent-active-card 2s ease-in-out infinite;
+}
+
+.agent-gate-pulse {
+  animation: agent-gate-pulse 2s ease-in-out infinite;
+}
+
+.agent-progress-shine {
+  background-size: 200% 100%;
+  animation: agent-progress-shine 3s linear infinite;
+}
+
+.agent-connector-flow {
+  animation: agent-connector-flow 2s ease-in-out infinite;
+}
+
+.agent-live-badge {
+  animation: agent-live-badge 1.5s ease-in-out infinite;
+}
+
+.agent-timeline-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.5) transparent;
+}
+
+.agent-timeline-scroll::-webkit-scrollbar {
+  height: 5px;
+}
+
+.agent-timeline-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.4);
+  border-radius: 9999px;
+}
+
+.agent-timeline-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}

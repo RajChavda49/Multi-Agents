@@ -1,7 +1,7 @@
 import { chatJsonPlanning } from "../llm.js";
 import { getRetryPromptContext } from "../retry-context.js";
 import { reportAgentActivity } from "../../services/pipeline-progress.js";
-import { formatJiraBlock, formatKnowledgeForA2 } from "../prompt-format.js";
+import { formatJiraContext, formatKnowledgeForA2 } from "../prompt-format.js";
 
 const SYSTEM = `You are A2 Dev Plan Agent. Turn Jira + A1 analysis into a concrete implementation plan.
 
@@ -34,7 +34,9 @@ export async function runA2DevPlan(state) {
   const startedAt = new Date().toISOString();
   reportAgentActivity(state.pipeline_id, { current_agent: "A2" });
 
-  const user = `${getRetryPromptContext(state)}${formatJiraBlock(task)}
+  const jira = formatJiraContext(task);
+
+  const user = `${getRetryPromptContext(state)}${jira.text}
 
 === A1 ANALYSIS ===
 ${JSON.stringify(formatKnowledgeForA2(knowledge), null, 2)}
@@ -46,6 +48,7 @@ Write the dev plan. Be specific about which files to edit.`;
     pipeline_id: state.pipeline_id,
     num_predict: 800,
     num_ctx: 4096,
+    images: jira.images,
   });
 
   if (!spec.backend_needed) {

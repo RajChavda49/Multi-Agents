@@ -106,12 +106,21 @@ export function isTargetRepoConfigured() {
 }
 
 export function getTargetRepoPath() {
-  return getEffectiveRepoPath();
+  const p = getEffectiveRepoPath();
+  return p ? path.resolve(p) : null;
 }
 
 function assertInsideRepo(relPath) {
   const root = getTargetRepoPath();
-  const full = path.resolve(root, relPath);
+  if (!root) {
+    throw new Error("No target repo configured");
+  }
+  const rel = String(relPath || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\/+/, "");
+  const full = path.resolve(root, rel);
   if (!full.startsWith(root + path.sep) && full !== root) {
     throw new Error(`Unsafe path outside target repo: ${relPath}`);
   }
@@ -456,7 +465,7 @@ export function gatherKnowledgeContext(jiraTask, retryFeedback = "", intent = nu
       summary: "No codebase connected — using generic planning context",
       repo_connected: false,
       relevant_modules: ["src/components", "src/api"],
-      constraints: ["Connect GITLAB_* or TARGET_REPO_PATH in backend/.env"],
+      constraints: ["Connect GITHUB_*, GITLAB_*, or TARGET_REPO_PATH in backend/.env"],
       dependencies: [],
       risks: [],
       documentation_refs: [],
@@ -589,30 +598,45 @@ export function writeFilesToTargetRepo(files, snapshotMap = {}) {
   for (const file of files || []) {
     if (!file?.path) continue;
     const content = file.content ?? "";
-    const original = readOriginalFile(file.path);
+    const relPath = String(file.path)
+      .trim()
+      .replace(/\\/g, "/")
+      .replace(/^\/+/, "")
+      .replace(/^\.\/+/, "");
+    const original = readOriginalFile(relPath);
 
     // Guard 1: LLM returned a prompt excerpt instead of the full file
     if (TRUNCATION_MARKERS.test(content)) {
       throw new Error(
-        `Refusing to write ${file.path}: model returned a prompt excerpt instead of the full file`,
+        `Refusing to write ${relPath}: model returned a prompt excerpt instead of the full file`,
       );
     }
 
-    // Guard 2: output is significantly shorter than the original — likely truncated
-    if (original && content.length < original.length * 0.85) {
+    // Guard 2: block accidental full-file overwrite of existing source (patch results are trusted)
+    const writeMode = file.write_mode || (original ? "overwrite" : "create");
+    if (writeMode === "patch_result") {
+      // applyEditsToRepo already validated patch size
+    } else if (!original) {
+      if (content.length < 80 && !/\.(test|spec)\.(js|jsx|ts|tsx)$/i.test(relPath)) {
+        throw new Error(
+          `Refusing to write ${relPath}: new file content is too short (${content.length} chars) — write complete implementation, not a stub`,
+        );
+      }
+    } else if (content.length < original.length * 0.85) {
       throw new Error(
-        `Refusing to write ${file.path}: output (${content.length} chars) would truncate original (${original.length} chars)`,
+        `Refusing to write ${relPath}: output (${content.length} chars) would truncate original (${original.length} chars). ` +
+          `Use search/replace edits for existing files — do not replace the whole file with a stub.`,
       );
     }
 
-    if (!snapshots[file.path]) {
-      snapshots[file.path] = captureFileSnapshot(file.path);
+    if (!snapshots[relPath]) {
+      snapshots[relPath] = captureFileSnapshot(relPath);
     }
 
-    const fullPath = assertInsideRepo(file.path);
+    const fullPath = assertInsideRepo(relPath);
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
     fs.writeFileSync(fullPath, content, "utf-8");
-    written.push(file.path);
+    written.push(relPath);
   }
 
   return { root, written, snapshot_map: snapshots, skipped: false };

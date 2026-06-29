@@ -4,7 +4,7 @@ import { inferTaskSearchIntent } from "../../integrations/repo-task-intent.js";
 import { enrichKnowledgeContext } from "../../integrations/edit-targets.js";
 import { getRetryPromptContext } from "../retry-context.js";
 import { reportAgentActivity } from "../../services/pipeline-progress.js";
-import { formatJiraBlock, formatRepoScanForLlm } from "../prompt-format.js";
+import { formatJiraContext, formatRepoScanForLlm } from "../prompt-format.js";
 
 const SYSTEM = `You are A1 Knowledge Agent for an SDLC pipeline.
 
@@ -54,7 +54,9 @@ export async function runA1Knowledge(state) {
   const taskIntent = await inferTaskSearchIntent(task, state.retry_feedback, state.pipeline_id);
   const repoContext = gatherKnowledgeContext(task, state.retry_feedback, taskIntent);
 
-  const user = `${getRetryPromptContext(state)}${formatJiraBlock(task)}
+  const jira = formatJiraContext(task);
+
+  const user = `${getRetryPromptContext(state)}${jira.text}
 
 ${formatRepoScanForLlm(repoContext)}
 
@@ -65,6 +67,7 @@ Analyze the task from title + description first, then confirm edit targets from 
     pipeline_id: state.pipeline_id,
     num_predict: 640,
     num_ctx: 4096,
+    images: jira.images,
   });
 
   const mergedModules = normalizeModuleDirs([

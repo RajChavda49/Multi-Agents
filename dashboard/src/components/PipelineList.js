@@ -1,6 +1,7 @@
 import { useState } from "react";
 import StatusBadge from "./StatusBadge.js";
 import AgentTimeline from "./AgentTimeline.js";
+import { formatRunningLabel, runningAgents } from "../lib/agent-details.js";
 
 export default function PipelineList({ pipelines, selectedId, onSelect, onDelete }) {
   const [deletingId, setDeletingId] = useState(null);
@@ -65,13 +66,8 @@ export default function PipelineList({ pipelines, selectedId, onSelect, onDelete
           </div>
           <p className="text-sm text-slate-200 truncate">{p.summary}</p>
           {["phase_1_running", "phase_2_running"].includes(p.status) &&
-            (p.active_agents?.length || p.current_agent) && (
-            <p className="text-xs text-blue-300 mt-1">
-              {(p.active_agents?.length > 1
-                ? p.active_agents.join(", ")
-                : p.active_agents?.[0] || (p.current_agent === "A4-A6" ? "A4–A6" : p.current_agent))}{" "}
-              via Ollama…
-            </p>
+            (runningAgents(p).length > 0 || p.phase_2_substatus === "writing_code") && (
+            <p className="text-xs text-blue-300 mt-1">{formatRunningLabel(p)}</p>
           )}
           {p.status === "failed" && p.error && (
             <p className="text-xs text-red-400 mt-1 truncate" title={p.error}>

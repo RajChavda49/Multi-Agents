@@ -55,16 +55,20 @@ async function clarifyTargetsNode(state) {
     return {};
   }
 
-  reportAgentActivity(state.pipeline_id, {
+  saveNodeProgress(state.pipeline_id, {
     status: "awaiting_target_clarification",
     phase: "planning",
     current_agent: "CLARIFY",
+    knowledge_context: knowledge,
   });
 
   const decision = interrupt({
     gate: "TARGET_CLARIFY",
-    message:
-      "Could not confidently locate existing files to edit. Confirm the correct repo paths before planning continues.",
+    message: knowledge.requires_create_decision
+      ? "No matching files were found in the repo. Choose whether to create new files or specify existing paths to edit."
+      : "Could not confidently locate existing files to edit. Confirm the correct repo paths before planning continues.",
+    requires_create_decision: knowledge.requires_create_decision === true,
+    clarification_mode: knowledge.clarification_mode,
     issues: knowledge.clarification_issues || [],
     suggested_files: (knowledge.edit_targets || []).map((t) => t.path),
     matched_files: (knowledge.matched_files || []).map((f) => f.path),
@@ -72,6 +76,7 @@ async function clarifyTargetsNode(state) {
   });
 
   const updatedKnowledge = applyUserTargetConfirmation(knowledge, decision, state.jira_task);
+  const confirmedCount = (updatedKnowledge.user_confirmed_targets || []).length;
 
   return {
     knowledge_context: updatedKnowledge,
@@ -81,7 +86,11 @@ async function clarifyTargetsNode(state) {
         name: "Target Clarification",
         status: "completed",
         completed_at: new Date().toISOString(),
-        output_summary: `Confirmed ${(updatedKnowledge.edit_targets || []).filter((t) => t.exists).length} file(s) to edit`,
+        output_summary: updatedKnowledge.allow_new_files
+          ? confirmedCount
+            ? `Create new files + edit ${confirmedCount} existing`
+            : "Proceeding with new file creation"
+          : `Confirmed ${confirmedCount} file(s) to edit`,
       },
     ],
   };
@@ -300,6 +309,8 @@ async function devParallelNode(state) {
     code_write_result: writeResult,
     repo_snapshots: writeResult.repo_snapshots,
     knowledge_context: knowledge,
+    current_agent: "A7",
+    phase_2_substatus: null,
     agent_logs: [
       ...(a4.agent_logs || []),
       ...(a5.agent_logs || []),
@@ -312,6 +323,7 @@ async function devParallelNode(state) {
     status: "phase_2_running",
     current_agent: "A7",
     active_agents: [],
+    phase_2_substatus: null,
     repo_source: repoReady.source,
     git_branch: repoReady.branch,
     repo_ready: repoReady,
@@ -564,43 +576,45 @@ export async function runPlanningPhase(initialState) {
 }
 
 export async function retryDevelopmentPhase(pipeline) {
-  const threadId = pipeline.graph_thread_id || pipeline.id;
+  const retryId = pipeline.auto_retry_count || pipeline.retry_count || 0;
+  const threadId =
+    retryId > 0
+      ? `${pipeline.id}::ar${retryId}`
+      : pipeline.graph_thread_id || pipeline.id;
   const graph = getGraph();
   const config = graphConfig(threadId);
+  const { Command } = await import("@langchain/langgraph");
 
-  await graph.updateState(config, {
-    values: {
-      pipeline_id: pipeline.id,
-      jira_task: pipeline.jira_task,
-      knowledge_context: pipeline.knowledge_context,
-      technical_spec: pipeline.technical_spec,
-      test_cases: pipeline.test_cases,
-      test_suite_name: pipeline.test_suite_name,
-      gate_1_approved: true,
-      gate_1_feedback: pipeline.gate_1_feedback,
-      retry_feedback: pipeline.retry_feedback,
-      phase: "development",
-      status: "phase_2_running",
-      frontend_code: null,
-      backend_code: null,
-      test_code: null,
-      workspace_files: [],
-      gate_2_approved: null,
-      gate_2_feedback: null,
-      code_review: null,
-      test_execution: null,
-      execution_report: null,
-      git_branch: pipeline.git_branch,
-      repo_source: pipeline.repo_source,
-      agent_logs: [],
-    },
-    asNode: "dev_parallel",
-  });
+  const devState = {
+    pipeline_id: pipeline.id,
+    jira_task: pipeline.jira_task,
+    knowledge_context: pipeline.knowledge_context,
+    technical_spec: pipeline.technical_spec,
+    test_cases: pipeline.test_cases,
+    test_suite_name: pipeline.test_suite_name,
+    gate_1_approved: true,
+    gate_1_feedback: pipeline.gate_1_feedback,
+    retry_feedback: pipeline.retry_feedback,
+    phase: "development",
+    status: "phase_2_running",
+    frontend_code: null,
+    backend_code: null,
+    test_code: null,
+    workspace_files: [],
+    gate_2_approved: null,
+    gate_2_feedback: null,
+    code_review: null,
+    test_execution: null,
+    execution_report: null,
+    git_branch: pipeline.git_branch,
+    repo_source: pipeline.repo_source,
+    agent_logs: [],
+  };
 
-  const result = await graph.invoke(null, config);
+  const result = await graph.invoke(new Command({ goto: "dev_parallel", update: devState }), config);
   const status = await resolveStatus(threadId, result);
   const current_agent = status === "awaiting_gate_2" ? "GATE_2" : result.current_agent;
-  return { ...result, status, current_agent };
+  return { ...result, status, current_agent, graph_thread_id: threadId };
 }
 
 export async function resumeGate1(threadId, { approved, feedback = null }) {

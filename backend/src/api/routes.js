@@ -29,6 +29,7 @@ import {
 import jiraRoutes from "./jira-routes.js";
 import repoRoutes from "./repo-routes.js";
 import gitlabRoutes from "./gitlab-routes.js";
+import githubRoutes from "./github-routes.js";
 
 const router = Router();
 
@@ -48,6 +49,7 @@ router.get("/health", async (_req, res) => {
 router.use("/jira", jiraRoutes);
 router.use("/repo", repoRoutes);
 router.use("/gitlab", gitlabRoutes);
+router.use("/github", githubRoutes);
 
 router.get("/pipelines", (_req, res) => {
   const pipelines = listPipelines().map((p) =>
@@ -77,9 +79,9 @@ router.get("/pipelines/:id", (req, res) => {
   });
 });
 
-router.delete("/pipelines/:id", (req, res) => {
+router.delete("/pipelines/:id", async (req, res) => {
   try {
-    const result = removePipelineById(req.params.id);
+    const result = await removePipelineById(req.params.id);
     res.json(result);
   } catch (err) {
     const status = err.message.includes("not found") ? 404 : 400;

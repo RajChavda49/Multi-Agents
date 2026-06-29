@@ -14,6 +14,9 @@ export const config = {
   reasoningModel: process.env.OLLAMA_REASONING_MODEL || "qwen2.5-coder",
   codingModel: process.env.OLLAMA_CODING_MODEL || "qwen2.5-coder",
   skipBackendAgent: (process.env.SKIP_A5 ?? "true").toLowerCase() === "true",
+  agentAutoRetryMax: Math.max(1, Number(process.env.AGENT_AUTO_RETRY_MAX) || 5),
+  pipelineAutoRetryMax: Math.max(1, Number(process.env.PIPELINE_AUTO_RETRY_MAX) || 5),
+  pipelineAutoRetryEnabled: (process.env.PIPELINE_AUTO_RETRY ?? "true").toLowerCase() === "true",
   /** ollama | gemini | auto — auto uses Gemini when GOOGLE_API_KEY is set */
   llmProvider: process.env.LLM_PROVIDER || "auto",
   /** Separate override for A4/A6; defaults to LLM_PROVIDER */
@@ -37,6 +40,14 @@ export const config = {
     defaultBranch: process.env.GITLAB_DEFAULT_BRANCH || "main",
     writeEnabled: (process.env.GITLAB_WRITE ?? "true").toLowerCase() === "true",
     createMr: (process.env.GITLAB_CREATE_MR ?? "true").toLowerCase() === "true",
+  },
+  github: {
+    baseUrl: process.env.GITHUB_BASE_URL || "https://github.com",
+    token: process.env.GITHUB_TOKEN || "",
+    projectPath: process.env.GITHUB_PROJECT_PATH || "",
+    defaultBranch: process.env.GITHUB_DEFAULT_BRANCH || "main",
+    writeEnabled: (process.env.GITHUB_WRITE ?? "true").toLowerCase() === "true",
+    createPr: (process.env.GITHUB_CREATE_MR ?? process.env.GITHUB_CREATE_PR ?? "true").toLowerCase() === "true",
   },
   jira: {
     baseUrl: process.env.JIRA_BASE_URL || "",

@@ -6,6 +6,7 @@ import {
   isTargetRepoConfigured,
   getTargetRepoPath,
 } from "../integrations/local-repo.js";
+import { normalizeRelPath } from "../integrations/edit-targets.js";
 import { isRepoWriteEnabled } from "../integrations/repo-target.js";
 import {
   captureSnapshotsForWrite,
@@ -16,10 +17,20 @@ export function workspacePath(pipelineId) {
   return path.join(config.workspacesDir, pipelineId);
 }
 
+function normalizeFileList(files) {
+  return (files || [])
+    .filter((f) => f?.path)
+    .map((f) => ({
+      ...f,
+      path: normalizeRelPath(f.path),
+    }))
+    .filter((f) => f.path);
+}
+
 function writeToRoot(root, files) {
   const written = [];
 
-  for (const file of files || []) {
+  for (const file of normalizeFileList(files)) {
     const fullPath = path.join(root, file.path);
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
     fs.writeFileSync(fullPath, file.content, "utf-8");
@@ -57,11 +68,12 @@ export function listWrittenFiles(writeResult) {
 }
 
 export function writeCodeFiles(pipelineId, files, priorSnapshots = {}) {
-  const snapshotMap = captureSnapshotsForWrite(files, priorSnapshots);
+  const normalized = normalizeFileList(files);
+  const snapshotMap = captureSnapshotsForWrite(normalized, priorSnapshots);
   const writeTarget = isTargetRepoConfigured() && isRepoWriteEnabled();
 
   if (writeTarget) {
-    const target = writeFilesToTargetRepo(files, snapshotMap);
+    const target = writeFilesToTargetRepo(normalized, snapshotMap);
     if (!target.skipped) {
       saveRepoSnapshotBackup(pipelineId, target.snapshot_map);
       console.log(
@@ -81,7 +93,7 @@ export function writeCodeFiles(pipelineId, files, priorSnapshots = {}) {
     );
   }
 
-  const sandbox = writeToRoot(workspacePath(pipelineId), files);
+  const sandbox = writeToRoot(workspacePath(pipelineId), normalized);
   console.log(
     `[code-write] pipeline=${pipelineId} → sandbox ${sandbox.root} (${sandbox.written.length} file(s) — set TARGET_REPO_PATH + TARGET_REPO_WRITE=true for local project writes)`,
   );

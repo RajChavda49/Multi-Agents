@@ -5,8 +5,12 @@ import { config } from "../config.js";
 import {
   getEffectiveRepoPath,
   isRepoWriteEnabled,
+  isRemoteRepoConfigured,
+  getRemoteClonePath,
 } from "./repo-target.js";
-import { isGitLabConfigured, getGitLabClonePath } from "./gitlab-client.js";
+import { isGitHubConfigured } from "./github-client.js";
+import { isGitLabConfigured } from "./gitlab-client.js";
+import { closePullRequest, deleteRemoteBranch } from "./github-client.js";
 
 const MAX_SNAPSHOT_BYTES = 512_000;
 const SNAPSHOT_FILE = ".repo-revert.json";
@@ -16,12 +20,19 @@ function workspaceSnapshotPath(pipelineId) {
 }
 
 function repoRoot() {
-  return getEffectiveRepoPath();
+  const root = getEffectiveRepoPath();
+  return root ? path.resolve(root) : null;
 }
 
 function assertInsideRepo(relPath, root) {
-  const full = path.resolve(root, relPath);
-  if (!full.startsWith(root + path.sep) && full !== root) {
+  const resolvedRoot = path.resolve(root);
+  const rel = String(relPath || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\/+/, "");
+  const full = path.resolve(resolvedRoot, rel);
+  if (!full.startsWith(resolvedRoot + path.sep) && full !== resolvedRoot) {
     throw new Error(`Unsafe path outside target repo: ${relPath}`);
   }
   return full;
@@ -213,16 +224,18 @@ function revertWrittenPathsWithoutSnapshots(writtenPaths = []) {
 }
 
 export function resetPipelineGitBranch(branch) {
-  if (!branch || !isGitLabConfigured()) {
-    return { skipped: true, reason: "gitlab not configured or no branch" };
+  if (!branch || !isRemoteRepoConfigured()) {
+    return { skipped: true, reason: "remote repo not configured or no branch" };
   }
 
-  const clonePath = getGitLabClonePath();
+  const clonePath = getRemoteClonePath();
   if (!isGitRepo(clonePath)) {
-    return { skipped: true, reason: "gitlab clone is not a git repo" };
+    return { skipped: true, reason: "remote clone is not a git repo" };
   }
 
-  const defaultBranch = config.gitlab.defaultBranch;
+  const defaultBranch = isGitLabConfigured()
+    ? config.gitlab.defaultBranch
+    : config.github.defaultBranch;
 
   try {
     runGit(`git checkout ${defaultBranch}`, clonePath);
@@ -236,6 +249,27 @@ export function resetPipelineGitBranch(branch) {
   } catch {
     return { skipped: false, checked_out: defaultBranch, deleted_branch: null };
   }
+}
+
+export async function cleanupRemotePublish(pipeline) {
+  const published = pipeline?.git_publish?.merge_request;
+  if (!published) return { skipped: true };
+
+  const results = {};
+
+  if (isGitHubConfigured() && published.number) {
+    try {
+      results.pull_request = await closePullRequest(published.number);
+    } catch (err) {
+      results.pull_request = { error: err.message };
+    }
+  }
+
+  if (pipeline.git_branch) {
+    results.remote_branch = deleteRemoteBranch(pipeline.git_branch);
+  }
+
+  return results;
 }
 
 export function revertPipelineRepoChanges(pipeline) {

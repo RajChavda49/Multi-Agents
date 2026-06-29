@@ -203,8 +203,11 @@ async function ollamaChatInner(system, user, model, meta = {}) {
 async function geminiChatJson(system, user, meta = {}) {
   const model = meta.model || config.geminiModel;
   const started = Date.now();
+  const images = meta.images || [];
   if (meta.agent) {
-    console.log(`[LLM] ${meta.agent} → gemini:${model} (prompt ~${user.length} chars)`);
+    console.log(
+      `[LLM] ${meta.agent} → gemini:${model} (prompt ~${user.length} chars${images.length ? `, ${images.length} image(s)` : ""})`,
+    );
   }
 
   if (!config.googleApiKey) {
@@ -217,13 +220,25 @@ async function geminiChatJson(system, user, meta = {}) {
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.googleApiKey}`;
 
+  const userParts = [{ text: user }];
+  for (const image of images) {
+    if (image?.base64 && image?.mime_type) {
+      userParts.push({
+        inlineData: {
+          mimeType: image.mime_type,
+          data: image.base64,
+        },
+      });
+    }
+  }
+
   try {
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: `${system}\nRespond ONLY with valid JSON.` }] },
-        contents: [{ role: "user", parts: [{ text: user }] }],
+        contents: [{ role: "user", parts: userParts }],
         generationConfig: {
           temperature: 0.2,
           maxOutputTokens: meta.num_predict ?? 1024,
@@ -294,6 +309,7 @@ async function chatJsonInner(system, user, options = {}) {
     timeout: options.timeout,
     model: options.model,
     planning: options.planning,
+    images: options.images,
   };
 
   if (provider === "gemini") {
@@ -333,6 +349,7 @@ export async function chatJsonCoding(system, user, agentOrOptions = {}) {
     num_predict,
     timeout: Number(process.env.GEMINI_TIMEOUT_MS) || 120_000,
     model: config.geminiCodingModel,
+    images: options.images,
   };
 
   if (provider === "gemini") {

@@ -61,6 +61,8 @@ export const api = {
   repoStatus: () => request("/repo/status"),
   gitlabStatus: () => request("/gitlab/status"),
   gitlabSync: () => request("/gitlab/sync", { method: "POST" }),
+  githubStatus: () => request("/github/status"),
+  githubSync: () => request("/github/sync", { method: "POST" }),
   jiraTasks: (params = {}) => {
     const qs = new URLSearchParams();
     if (params.jql) qs.set("jql", params.jql);

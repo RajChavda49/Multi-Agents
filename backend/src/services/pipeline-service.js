@@ -19,12 +19,19 @@ import {
   buildBrowseUrl,
   addComment,
 } from "../integrations/jira-client.js";
-import { isGitLabConfigured, syncGitLabRepository } from "../integrations/gitlab-client.js";
+import { isRemoteRepoConfigured, syncRemoteRepository } from "../integrations/remote-repo.js";
 import { publishPipelineChanges } from "../integrations/repo-target.js";
-import { revertPipelineRepoChanges } from "../integrations/repo-revert.js";
+import { revertPipelineRepoChanges, cleanupRemotePublish } from "../integrations/repo-revert.js";
 import { removePipelineWorkspace } from "../orchestrator/workspace.js";
 import { buildFailureRecord, failureSummary } from "./pipeline-errors.js";
 import { reportAgentActivity } from "./pipeline-progress.js";
+import {
+  canAutoRetryPipeline,
+  preparePipelineForAutoRetry,
+  recordAutoRetryExhausted,
+  recordAutoRetryScheduled,
+  shouldStopAutoRetry,
+} from "./pipeline-auto-retry.js";
 import {
   beginRun,
   cancelRun,
@@ -42,6 +49,62 @@ function startPipelineRun(pipelineId) {
 function stopPipelineRun(pipelineId) {
   endRun(pipelineId);
   activeRuns.delete(pipelineId);
+}
+
+function savePipelineFailure(pipelineId, base, err) {
+  if (!getPipeline(pipelineId)) return;
+  const latest = getPipeline(pipelineId) || base;
+  const failure = buildFailureRecord(err, latest);
+  const failMsg = failureSummary(failure) || err.message;
+  savePipeline({
+    ...latest,
+    status: "failed",
+    error: failMsg,
+    failure,
+    current_agent: failure.agent || latest.current_agent,
+    activity_log: [
+      ...(latest.activity_log || []),
+      {
+        at: new Date().toISOString(),
+        level: "error",
+        agent: failure.agent,
+        message: failMsg,
+      },
+    ].slice(-300),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+async function runWithPipelineAutoRetry(pipelineId, base, phase, runOnce) {
+  let current = base;
+
+  while (true) {
+    try {
+      return await runOnce(current);
+    } catch (err) {
+      if (isPipelineCancelledError(err)) throw err;
+      if (!getPipeline(pipelineId)) throw err;
+      if (shouldStopAutoRetry(err)) throw err;
+
+      const latest = getPipeline(pipelineId) || current;
+      if (!canAutoRetryPipeline(latest)) {
+        recordAutoRetryExhausted(pipelineId, err);
+        throw err;
+      }
+
+      current = preparePipelineForAutoRetry(latest, err, phase);
+      if (phase === "development") {
+        current.gate_1_approved = true;
+        current.phase = "development";
+        current.status = "phase_2_running";
+      }
+      savePipeline(current);
+      recordAutoRetryScheduled(pipelineId, err, phase);
+      console.warn(
+        `[pipeline-auto-retry] ${pipelineId} ${phase} #${current.auto_retry_count}: ${err.message}`,
+      );
+    }
+  }
 }
 
 const CreatePipelineSchema = z.object({
@@ -94,6 +157,7 @@ async function resolvePipelineInput(input) {
       jira_key: issue.jira_key,
       summary: issue.summary,
       description: issue.description,
+      description_images: issue.description_images || [],
       issue_type: issue.issue_type,
       priority: issue.priority,
       url: issue.url,
@@ -179,10 +243,14 @@ async function executePlanningPhase(pipelineId, base) {
   });
 
   try {
-    await ensureOllamaReady();
-    const result = await runPlanningPhase({ ...base, pipeline_id: pipelineId });
-    if (!getPipeline(pipelineId)) return;
-    const merged = await mergeGraphResult(pipelineId, base, result);
+    const merged = await runWithPipelineAutoRetry(pipelineId, base, "planning", async (current) => {
+      await ensureOllamaReady();
+      const result = await runPlanningPhase({ ...current, pipeline_id: pipelineId });
+      if (!getPipeline(pipelineId)) return null;
+      return mergeGraphResult(pipelineId, current, result);
+    });
+
+    if (!merged) return;
     savePipeline(merged);
 
     if (isJiraConfigured() && base.jira_task?.key) {
@@ -201,16 +269,7 @@ async function executePlanningPhase(pipelineId, base) {
       return;
     }
     if (!getPipeline(pipelineId)) return;
-    const latest = getPipeline(pipelineId) || base;
-    const failure = buildFailureRecord(err, latest);
-    savePipeline({
-      ...latest,
-      status: "failed",
-      error: failureSummary(failure) || err.message,
-      failure,
-      current_agent: failure.agent || latest.current_agent,
-      updated_at: new Date().toISOString(),
-    });
+    savePipelineFailure(pipelineId, base, err);
   } finally {
     stopPipelineRun(pipelineId);
   }
@@ -225,6 +284,7 @@ export async function createAndRunPipeline(input) {
     key: resolved.jira_key,
     summary: resolved.summary,
     description: resolved.description,
+    description_images: resolved.description_images || [],
     issue_type: resolved.issue_type,
     priority: resolved.priority,
     status: resolved.status,
@@ -250,17 +310,24 @@ export async function createAndRunPipeline(input) {
     error: null,
     failure: null,
     agent_logs: [],
+    activity_log: [
+      {
+        at: now,
+        level: "info",
+        message: `Pipeline started for ${jiraTask.key}`,
+      },
+    ],
     created_at: now,
     updated_at: now,
   };
 
   savePipeline(initial);
 
-  if (isGitLabConfigured()) {
+  if (isRemoteRepoConfigured()) {
     try {
-      await syncGitLabRepository();
+      await syncRemoteRepository();
     } catch (err) {
-      console.warn(`GitLab sync before planning failed: ${err.message}`);
+      console.warn(`Remote repo sync before planning failed: ${err.message}`);
     }
   }
 
@@ -292,11 +359,25 @@ export async function approveGate1(pipelineId, feedback = null) {
 
   startPipelineRun(pipelineId);
   try {
-    const result = await resumeGate1(existing.graph_thread_id || pipelineId, { approved: true, feedback });
-    if (!getPipeline(pipelineId)) {
+    const merged = await runWithPipelineAutoRetry(
+      pipelineId,
+      existing,
+      "development",
+      async (current) => {
+        await ensureOllamaReady();
+        const threadId = current.graph_thread_id || pipelineId;
+        const result =
+          (current.auto_retry_count || 0) > 0
+            ? await retryDevelopmentPhase(current)
+            : await resumeGate1(threadId, { approved: true, feedback });
+        if (!getPipeline(pipelineId)) return null;
+        return mergeGraphResult(pipelineId, current, result);
+      },
+    );
+
+    if (!merged) {
       return { id: pipelineId, deleted: true };
     }
-    const merged = await mergeGraphResult(pipelineId, existing, result);
     savePipeline(merged);
 
     if (isJiraConfigured() && existing.jira_task?.key) {
@@ -323,6 +404,9 @@ export async function approveGate1(pipelineId, feedback = null) {
     if (isPipelineCancelledError(err)) {
       console.log(`[pipeline] ${pipelineId} deleted — run stopped`);
       return { id: pipelineId, deleted: true };
+    }
+    if (getPipeline(pipelineId)) {
+      savePipelineFailure(pipelineId, existing, err);
     }
     throw err;
   } finally {
@@ -360,6 +444,12 @@ export async function rejectGate1(pipelineId, feedback = "Rejected by reviewer")
   return merged;
 }
 
+function hasTargetPaths(targets) {
+  if (!targets) return false;
+  if (Array.isArray(targets)) return targets.some((t) => String(t).trim());
+  return String(targets).trim().length > 0;
+}
+
 export async function confirmTargets(pipelineId, input = {}) {
   const existing = getPipeline(pipelineId);
   if (!existing) {
@@ -372,22 +462,39 @@ export async function confirmTargets(pipelineId, input = {}) {
 
   const decision = TargetClarifySchema.parse(input);
   const targets = decision.confirmed_targets || decision.target_files;
-  if (!targets || (Array.isArray(targets) && !targets.length)) {
-    throw new Error("confirmed_targets is required — provide repo-relative file paths to edit");
+  if (!hasTargetPaths(targets) && !decision.allow_new_files) {
+    throw new Error(
+      'Choose "Create new files" or provide repo-relative paths to edit before continuing',
+    );
   }
 
   startPipelineRun(pipelineId);
   try {
-    const result = await resumeTargetClarify(existing.graph_thread_id || pipelineId, decision);
-    if (!getPipeline(pipelineId)) {
+    const merged = await runWithPipelineAutoRetry(
+      pipelineId,
+      existing,
+      "planning",
+      async (current) => {
+        await ensureOllamaReady();
+        const result = await resumeTargetClarify(
+          current.graph_thread_id || pipelineId,
+          decision,
+        );
+        if (!getPipeline(pipelineId)) return null;
+        return mergeGraphResult(pipelineId, current, result);
+      },
+    );
+    if (!merged) {
       return { id: pipelineId, deleted: true };
     }
-    const merged = await mergeGraphResult(pipelineId, existing, result);
     savePipeline(merged);
     return merged;
   } catch (err) {
     if (isPipelineCancelledError(err)) {
       return { id: pipelineId, deleted: true };
+    }
+    if (getPipeline(pipelineId)) {
+      savePipelineFailure(pipelineId, existing, err);
     }
     throw err;
   } finally {
@@ -409,16 +516,31 @@ export async function confirmCodeWrite(pipelineId, input = {}) {
 
   startPipelineRun(pipelineId);
   try {
-    const result = await resumeCodeWriteClarify(existing.graph_thread_id || pipelineId, decision);
-    if (!getPipeline(pipelineId)) {
+    const merged = await runWithPipelineAutoRetry(
+      pipelineId,
+      existing,
+      "development",
+      async (current) => {
+        await ensureOllamaReady();
+        const result =
+          (current.auto_retry_count || 0) > 0
+            ? await retryDevelopmentPhase(current)
+            : await resumeCodeWriteClarify(current.graph_thread_id || pipelineId, decision);
+        if (!getPipeline(pipelineId)) return null;
+        return mergeGraphResult(pipelineId, current, result);
+      },
+    );
+    if (!merged) {
       return { id: pipelineId, deleted: true };
     }
-    const merged = await mergeGraphResult(pipelineId, existing, result);
     savePipeline(merged);
     return merged;
   } catch (err) {
     if (isPipelineCancelledError(err)) {
       return { id: pipelineId, deleted: true };
+    }
+    if (getPipeline(pipelineId)) {
+      savePipelineFailure(pipelineId, existing, err);
     }
     throw err;
   } finally {
@@ -530,6 +652,7 @@ export async function parseJiraWebhook(body) {
     jira_key: key,
     summary: fields.summary || "Untitled",
     description: extractDescription(fields.description),
+    description_images: [],
     issue_type: fields.issuetype?.name || "Task",
     priority: fields.priority?.name || "Medium",
     status: fields.status?.name,
@@ -625,21 +748,28 @@ export async function retryPipeline(pipelineId, input) {
     if (activeRuns.has(existing.id)) return;
     startPipelineRun(existing.id);
     try {
-      await ensureOllamaReady();
-      const result =
-        targetPhase === "planning"
-          ? await runPlanningPhase({ ...inProgress, pipeline_id: existing.id })
-          : await retryDevelopmentPhase(inProgress);
+      const merged = await runWithPipelineAutoRetry(
+        existing.id,
+        inProgress,
+        targetPhase,
+        async (current) => {
+          await ensureOllamaReady();
+          const result =
+            targetPhase === "planning"
+              ? await runPlanningPhase({ ...current, pipeline_id: existing.id })
+              : await retryDevelopmentPhase(current);
+          if (!getPipeline(existing.id)) return null;
+          return mergeGraphResult(existing.id, current, {
+            ...result,
+            graph_thread_id,
+            retry_feedback: reason,
+            retry_history,
+            retry_count,
+          });
+        },
+      );
 
-      if (!getPipeline(existing.id)) return;
-
-      const merged = await mergeGraphResult(existing.id, inProgress, {
-        ...result,
-        graph_thread_id,
-        retry_feedback: reason,
-        retry_history,
-        retry_count,
-      });
+      if (!merged) return;
       savePipeline(merged);
 
       if (isJiraConfigured() && existing.jira_task?.key) {
@@ -658,14 +788,7 @@ export async function retryPipeline(pipelineId, input) {
         return;
       }
       if (!getPipeline(existing.id)) return;
-      const failure = buildFailureRecord(err, inProgress);
-      savePipeline({
-        ...inProgress,
-        status: "failed",
-        error: failureSummary(failure) || err.message,
-        failure,
-        current_agent: failure.agent || inProgress.current_agent,
-      });
+      savePipelineFailure(existing.id, inProgress, err);
     } finally {
       stopPipelineRun(existing.id);
     }
@@ -676,7 +799,7 @@ export async function retryPipeline(pipelineId, input) {
   return getPipeline(existing.id);
 }
 
-export function removePipelineById(pipelineId) {
+export async function removePipelineById(pipelineId) {
   const existing = getPipeline(pipelineId);
   if (!existing) {
     throw new Error(`Pipeline not found: ${pipelineId}`);
@@ -686,6 +809,12 @@ export function removePipelineById(pipelineId) {
   activeRuns.delete(pipelineId);
 
   const repo_revert = revertPipelineRepoChanges(existing);
+  let remote_cleanup = { skipped: true };
+  try {
+    remote_cleanup = await cleanupRemotePublish(existing);
+  } catch (err) {
+    remote_cleanup = { error: err.message };
+  }
 
   deletePipeline(pipelineId);
   removePipelineWorkspace(pipelineId);
@@ -704,6 +833,7 @@ export function removePipelineById(pipelineId) {
     deleted: true,
     jira_key: existing.jira_task?.key,
     repo_revert,
+    remote_cleanup,
   };
 }
 
