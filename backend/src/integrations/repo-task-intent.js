@@ -1,4 +1,5 @@
 import { chatJsonPlanning } from "../orchestrator/llm.js";
+import { config } from "../config.js";
 import { formatJiraContext } from "../orchestrator/prompt-format.js";
 import { getRetryPromptContext } from "../orchestrator/retry-context.js";
 
@@ -24,6 +25,10 @@ Rules:
 - If the task is ambiguous, say so in intent_summary but still pick the most likely ui_area.`;
 
 export async function inferTaskSearchIntent(jiraTask, retryFeedback = "", pipelineId = null) {
+  if (config.skipIntentLlm) {
+    return fallbackIntent(jiraTask);
+  }
+
   const jira = formatJiraContext(jiraTask);
   const user = `${getRetryPromptContext({ retry_feedback: retryFeedback })}${jira.text}
 

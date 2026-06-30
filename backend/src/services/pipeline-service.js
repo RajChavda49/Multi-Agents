@@ -100,6 +100,15 @@ async function runWithPipelineAutoRetry(pipelineId, base, phase, runOnce) {
       }
       savePipeline(current);
       recordAutoRetryScheduled(pipelineId, err, phase);
+      if (phase === "planning") {
+        reportAgentActivity(pipelineId, {
+          status: "phase_1_running",
+          phase: "planning",
+          current_agent: "A1",
+          activity_message: `Planning retry #${current.auto_retry_count} — restarting from A1`,
+          activity_level: "warn",
+        });
+      }
       console.warn(
         `[pipeline-auto-retry] ${pipelineId} ${phase} #${current.auto_retry_count}: ${err.message}`,
       );

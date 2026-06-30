@@ -22,15 +22,21 @@ function timeoutMs() {
 }
 
 function planningTimeoutMs() {
-  return Number(process.env.OLLAMA_PLANNING_TIMEOUT_MS) || 300_000;
+  return Number(process.env.OLLAMA_PLANNING_TIMEOUT_MS) || 600_000;
 }
 
 function hintForMessage(message) {
+  if (/401|unauthorized/i.test(message)) {
+    return "Ollama cloud auth failed. Set OLLAMA_API_KEY in backend/.env (https://ollama.com/settings/keys) or run: ollama signin";
+  }
+  if (/subscription|upgrade for access/i.test(message)) {
+    return "This cloud model needs an Ollama subscription (https://ollama.com/upgrade) or use a free cloud model (e.g. gpt-oss:20b-cloud).";
+  }
   if (/timeout|aborted/i.test(message)) {
     return "LLM timed out on CPU. Increase OLLAMA_PLANNING_TIMEOUT_MS or set GOOGLE_API_KEY + LLM_PROVIDER=gemini.";
   }
-  if (/invalid JSON/i.test(message)) {
-    return "The model returned text that was not valid JSON. Retry or switch models.";
+  if (/invalid JSON|truncated|malformed JSON/i.test(message)) {
+    return "Model returned truncated JSON — retrying with smaller output or higher token limit.";
   }
   if (/fetch failed|ECONNREFUSED/i.test(message)) {
     return "Cannot reach Ollama. Run: ollama serve";
@@ -38,19 +44,89 @@ function hintForMessage(message) {
   return "Check backend logs. For speed: GOOGLE_API_KEY + LLM_PROVIDER=gemini";
 }
 
+function ollamaRequestHeaders() {
+  const headers = { "Content-Type": "application/json" };
+  if (config.ollamaApiKey) {
+    headers.Authorization = `Bearer ${config.ollamaApiKey}`;
+  }
+  return headers;
+}
+
+function parseJsonFromLlm(content) {
+  const text = String(content || "").trim();
+  if (!text) throw new Error("empty response");
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    /* fall through */
+  }
+
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) {
+    try {
+      return JSON.parse(fenced[1].trim());
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const startObj = text.indexOf("{");
+  const startArr = text.indexOf("[");
+  const start =
+    startObj >= 0 && (startArr < 0 || startObj < startArr) ? startObj : startArr;
+  if (start < 0) throw new Error("no JSON object found");
+
+  const open = text[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) return JSON.parse(text.slice(start, i + 1));
+    }
+  }
+
+  throw new Error("truncated or malformed JSON");
+}
+
+function isThinkingOllamaModel(model) {
+  const name = String(model || "").toLowerCase();
+  return name.includes("gpt-oss") || name.includes("thinking");
+}
+
 function ollamaOptions(meta = {}) {
-  return {
+  const opts = {
     num_ctx: meta.num_ctx ?? (Number(process.env.OLLAMA_NUM_CTX) || 4096),
     num_predict: meta.num_predict ?? (Number(process.env.OLLAMA_NUM_PREDICT) || 2048),
     temperature: 0.2,
   };
+  const threads = Number(process.env.OLLAMA_NUM_THREAD);
+  if (Number.isFinite(threads) && threads > 0) opts.num_thread = threads;
+  return opts;
 }
 
-let ollamaChain = Promise.resolve();
+let ollamaChains = new Map();
 
-function withOllamaQueue(fn) {
-  const run = ollamaChain.then(fn, fn);
-  ollamaChain = run.catch(() => {});
+function withOllamaQueue(model, fn) {
+  const key = model || "default";
+  const prev = ollamaChains.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  ollamaChains.set(key, run.catch(() => {}));
   return run;
 }
 
@@ -103,10 +179,21 @@ function hasModel(models, name) {
   return models.some((m) => m === name || m.startsWith(`${name}:`));
 }
 
+function isOllamaCloudModel(model) {
+  const name = String(model || "");
+  return name.includes(":cloud") || name.endsWith("-cloud");
+}
+
 export async function resolvePlanningModel() {
+  const configured = config.planningModel;
   const models = await listOllamaModels();
+
+  if (configured && (isOllamaCloudModel(configured) || hasModel(models, configured))) {
+    return configured;
+  }
+
   const candidates = [
-    config.planningModel,
+    configured,
     "qwen2.5:3b",
     "llama3.2:3b",
     "llama3",
@@ -115,11 +202,11 @@ export async function resolvePlanningModel() {
   for (const name of candidates) {
     if (name && hasModel(models, name)) return name;
   }
-  return config.reasoningModel;
+  return configured || config.reasoningModel;
 }
 
 async function ollamaChat(system, user, model, meta = {}) {
-  return withOllamaQueue(() => ollamaChatInner(system, user, model, meta));
+  return withOllamaQueue(model, () => ollamaChatInner(system, user, model, meta));
 }
 
 function resolveRequestSignal(meta) {
@@ -144,59 +231,99 @@ function throwIfPipelineCancelled(err, meta) {
 }
 
 async function ollamaChatInner(system, user, model, meta = {}) {
+  const maxJsonRetries = meta.coding ? 3 : 2;
+  let attemptUser = user;
+  let numPredict =
+    meta.num_predict ?? (Number(process.env.OLLAMA_NUM_PREDICT) || 2048);
+
+  for (let jsonAttempt = 1; jsonAttempt <= maxJsonRetries; jsonAttempt++) {
+    try {
+      return await ollamaChatOnce(system, attemptUser, model, {
+        ...meta,
+        num_predict: numPredict,
+      });
+    } catch (err) {
+      throwIfPipelineCancelled(err, meta);
+      const message = err?.message || String(err);
+      const retryable = /invalid JSON|truncated|malformed JSON|empty response/i.test(message);
+      if (!retryable || jsonAttempt >= maxJsonRetries) {
+        if (err instanceof LlmCallError) throw err;
+        throw new LlmCallError(message, {
+          agent: meta.agent,
+          model,
+          hint: hintForMessage(message),
+        });
+      }
+
+      numPredict = Math.min(Math.max(numPredict * 2, 8192), 16384);
+      attemptUser = `${user}
+
+[JSON RETRY ${jsonAttempt}/${maxJsonRetries - 1}] Previous response was truncated or invalid JSON.
+Return COMPLETE valid JSON only. If generating code, use one files[] entry with compact code.`;
+      console.warn(
+        `[LLM] ${meta.agent || model} JSON retry ${jsonAttempt} (num_predict→${numPredict})`,
+      );
+    }
+  }
+
+  throw new LlmCallError(`Ollama JSON failed after ${maxJsonRetries} attempts`, {
+    agent: meta.agent,
+    model,
+  });
+}
+
+async function ollamaChatOnce(system, user, model, meta = {}) {
   const started = Date.now();
   if (meta.agent) {
     console.log(`[LLM] ${meta.agent} → ${model} (prompt ~${user.length} chars)`);
   }
 
+  const body = {
+    model,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    stream: false,
+    keep_alive: process.env.OLLAMA_KEEP_ALIVE || "30m",
+    options: ollamaOptions(meta),
+  };
+  // gpt-oss/thinking cloud models often ignore format:json and return prose instead
+  if (!isThinkingOllamaModel(model)) {
+    body.format = "json";
+  }
+
+  const response = await fetch(`${config.ollamaBaseUrl}/api/chat`, {
+    method: "POST",
+    headers: ollamaRequestHeaders(),
+    body: JSON.stringify(body),
+    signal: resolveRequestSignal(meta),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Ollama HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`);
+  }
+
+  const data = await response.json();
+  const content = data?.message?.content;
+  if (!content) {
+    throw new Error("Ollama returned an empty response");
+  }
+
+  if (meta.agent) {
+    const loadSec = ((data.load_duration || 0) / 1e9).toFixed(1);
+    const totalSec = ((Date.now() - started) / 1000).toFixed(1);
+    console.log(`[LLM] ${meta.agent} done in ${totalSec}s (model load ${loadSec}s)`);
+  }
+
   try {
-    const response = await fetch(`${config.ollamaBaseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-        stream: false,
-        format: "json",
-        keep_alive: process.env.OLLAMA_KEEP_ALIVE || "30m",
-        options: ollamaOptions(meta),
-      }),
-      signal: resolveRequestSignal(meta),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`Ollama HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`);
-    }
-
-    const data = await response.json();
-    const content = data?.message?.content;
-    if (!content) {
-      throw new Error("Ollama returned an empty response");
-    }
-
-    if (meta.agent) {
-      const loadSec = ((data.load_duration || 0) / 1e9).toFixed(1);
-      const totalSec = ((Date.now() - started) / 1000).toFixed(1);
-      console.log(`[LLM] ${meta.agent} done in ${totalSec}s (model load ${loadSec}s)`);
-    }
-
-    try {
-      return JSON.parse(content);
-    } catch {
-      throw new Error(`Ollama returned invalid JSON from model ${model}`);
-    }
-  } catch (err) {
-    throwIfPipelineCancelled(err, meta);
-    const message = err.message || String(err);
-    throw new LlmCallError(message, {
-      agent: meta.agent,
-      model,
-      hint: hintForMessage(message),
-    });
+    return parseJsonFromLlm(content);
+  } catch {
+    const preview = content.replace(/\s+/g, " ").slice(0, 120);
+    throw new Error(
+      `Ollama returned invalid JSON from model ${model}${preview ? `: ${preview}` : ""}`,
+    );
   }
 }
 
@@ -273,7 +400,7 @@ async function geminiChatJson(system, user, meta = {}) {
     }
 
     try {
-      return JSON.parse(content);
+      return parseJsonFromLlm(content);
     } catch {
       throw new LlmCallError(`Gemini returned invalid JSON`, {
         agent: meta.agent,
@@ -324,15 +451,36 @@ export async function chatJson(system, user, options = {}) {
   return chatJsonInner(system, user, options);
 }
 
-/** Fast path for A1–A3: smaller model, smaller context, shorter output, optional Gemini. */
+function planningNumCtx() {
+  const n = Number(process.env.OLLAMA_PLANNING_NUM_CTX);
+  return Number.isFinite(n) && n > 0 ? n : 4096;
+}
+
+function planningNumPredict(model) {
+  const fromEnv = Number(process.env.OLLAMA_PLANNING_NUM_PREDICT);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  if (model && isOllamaCloudModel(model)) return 4096;
+  return 2048;
+}
+
+/** Planning path for A1–A3. Limits only apply when set in .env — agents are not hard-capped in code. */
 export async function chatJsonPlanning(system, user, options = {}) {
+  const model = options.model || (await resolvePlanningModel());
   return chatJsonInner(system, user, {
     ...options,
+    model,
     planning: true,
-    num_ctx: options.num_ctx ?? 2048,
-    num_predict: options.num_predict ?? 512,
+    num_ctx: options.num_ctx ?? planningNumCtx(),
+    num_predict: options.num_predict ?? planningNumPredict(model),
     timeout: options.timeout ?? planningTimeoutMs(),
   });
+}
+
+function codingNumPredict(model) {
+  const fromEnv = Number(process.env.OLLAMA_CODING_NUM_PREDICT);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return fromEnv;
+  if (isOllamaCloudModel(model) || isThinkingOllamaModel(model)) return 16384;
+  return 8192;
 }
 
 export async function chatJsonCoding(system, user, agentOrOptions = {}) {
@@ -340,27 +488,28 @@ export async function chatJsonCoding(system, user, agentOrOptions = {}) {
     typeof agentOrOptions === "string" ? { agent: agentOrOptions } : agentOrOptions;
   const agent = options.agent || "A4";
   const provider = resolveCodingProvider();
-  const num_predict = Number(process.env.GEMINI_CODING_MAX_TOKENS) ||
-    Number(process.env.OLLAMA_CODING_NUM_PREDICT) ||
-    8192;
+  const codingModel = config.codingModel;
+  const num_predict = Number(process.env.GEMINI_CODING_MAX_TOKENS) || codingNumPredict(codingModel);
   const meta = {
     agent,
     pipeline_id: options.pipeline_id,
     num_predict,
-    timeout: Number(process.env.GEMINI_TIMEOUT_MS) || 120_000,
+    timeout: Number(process.env.GEMINI_TIMEOUT_MS) || timeoutMs(),
     model: config.geminiCodingModel,
     images: options.images,
+    coding: true,
   };
 
   if (provider === "gemini") {
     return geminiChatJson(system, user, meta);
   }
 
-  return ollamaChat(system, user, config.codingModel, {
+  return ollamaChat(system, user, codingModel, {
     agent,
     pipeline_id: options.pipeline_id,
-    num_predict: Number(process.env.OLLAMA_CODING_NUM_PREDICT) || 4096,
+    num_predict: codingNumPredict(codingModel),
     num_ctx: Number(process.env.OLLAMA_NUM_CTX) || 8192,
+    coding: true,
   });
 }
 
@@ -443,6 +592,16 @@ async function warmupOllamaInner() {
   }
 
   const model = await resolvePlanningModel();
+  if (isOllamaCloudModel(model)) {
+    if (config.ollamaApiKey) {
+      console.log(`Ollama planning: ${model} (cloud — OLLAMA_API_KEY configured)`);
+    } else {
+      console.log(
+        `Ollama planning: ${model} (cloud — set OLLAMA_API_KEY in .env or run: ollama signin)`,
+      );
+    }
+    return;
+  }
   if (await isModelLoaded(model)) {
     console.log(`Ollama ready: ${model} already in memory`);
     return;
@@ -455,7 +614,7 @@ async function warmupOllamaInner() {
   try {
     const response = await fetch(`${config.ollamaBaseUrl}/api/generate`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: ollamaRequestHeaders(),
       body: JSON.stringify({
         model,
         prompt: "ok",

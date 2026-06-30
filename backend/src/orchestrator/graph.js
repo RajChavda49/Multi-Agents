@@ -9,6 +9,11 @@ import { config } from "../config.js";
 import { runA7CodeReview } from "./agents/a7-code-review.js";
 import { runA8TestExec } from "./agents/a8-test-exec.js";
 import { runA9Report } from "./agents/a9-report.js";
+import {
+  backendSkipReason,
+  resolveProjectScope,
+  shouldRunBackendAgent,
+} from "./project-scope.js";
 import { writeCodeFiles, listWorkspaceFiles } from "./workspace.js";
 import { ensureRepoReady } from "../integrations/repo-target.js";
 import { applyUserTargetConfirmation } from "../integrations/edit-targets.js";
@@ -53,6 +58,28 @@ async function clarifyTargetsNode(state) {
   const knowledge = state.knowledge_context;
   if (!knowledge?.needs_target_clarification) {
     return {};
+  }
+
+  if (config.autonomousMode && knowledge.clarification_mode !== "no_repo") {
+    const autoKnowledge = {
+      ...knowledge,
+      allow_new_files: true,
+      user_target_decision_made: true,
+      needs_target_clarification: false,
+      requires_create_decision: false,
+    };
+    return {
+      knowledge_context: autoKnowledge,
+      agent_logs: [
+        {
+          agent: "CLARIFY",
+          name: "Target Clarification",
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          output_summary: `Autonomous: ${knowledge.autonomous_decision || "create + patch as needed"}`,
+        },
+      ],
+    };
   }
 
   saveNodeProgress(state.pipeline_id, {
@@ -163,6 +190,25 @@ const PipelineAnnotation = Annotation.Root({
 });
 
 async function gate1Node(state) {
+  if (config.autoApproveGates) {
+    return {
+      gate_1_approved: true,
+      gate_1_feedback: null,
+      status: "phase_2_running",
+      phase: "development",
+      current_agent: "GATE_1",
+      agent_logs: [
+        {
+          agent: "GATE_1",
+          name: "Human Gate 1",
+          status: "approved",
+          completed_at: new Date().toISOString(),
+          output_summary: "Auto-approved (AUTO_APPROVE_GATES=true)",
+        },
+      ],
+    };
+  }
+
   const decision = interrupt({
     gate: "GATE_1",
     message: "Review technical spec and test plan before development begins.",
@@ -201,11 +247,14 @@ function routeAfterGate1(state) {
 
 async function devParallelNode(state) {
   assertPipelineActive(state.pipeline_id);
+  const projectScope = resolveProjectScope(state);
+  const runA5 = shouldRunBackendAgent(state);
   reportAgentActivity(state.pipeline_id, {
     status: "phase_2_running",
     phase: "development",
     current_agent: "A4-A6",
-    active_agents: config.skipBackendAgent ? ["A4", "A6"] : ["A4", "A5", "A6"],
+    active_agents: runA5 ? ["A4", "A5", "A6"] : ["A4", "A6"],
+    project_scope: projectScope,
   });
 
   let repoReady = { source: "none", path: null, branch: null };
@@ -220,17 +269,17 @@ async function devParallelNode(state) {
     repoReady = { source: "error", path: null, branch: null, error: err.message };
   }
 
-  const a4Promise = runA4Frontend(state);
-  const a6Promise = runA6TestCoding(state);
+  // Sequential: same 16B coding model — avoids double load / queue contention on local Ollama
+  const a4 = await runA4Frontend(state);
+  const a6 = await runA6TestCoding(state);
 
-  let a4;
   let a5;
-  let a6;
 
-  if (config.skipBackendAgent) {
+  if (!runA5) {
     const skippedAt = new Date().toISOString();
+    const reason = backendSkipReason(state);
     a5 = {
-      backend_code: { files: [], skipped: true, reason: "A5 disabled — backend coding skipped" },
+      backend_code: { files: [], skipped: true, reason },
       agent_logs: [
         {
           agent: "A5",
@@ -238,13 +287,12 @@ async function devParallelNode(state) {
           status: "completed",
           started_at: skippedAt,
           completed_at: skippedAt,
-          output_summary: "Skipped (A5 disabled)",
+          output_summary: reason,
         },
       ],
     };
-    [a4, a6] = await Promise.all([a4Promise, a6Promise]);
   } else {
-    [a4, a5, a6] = await Promise.all([a4Promise, runA5Backend(state), a6Promise]);
+    a5 = await runA5Backend(state);
   }
 
   const sourceFiles = [
@@ -260,7 +308,16 @@ async function devParallelNode(state) {
   let validation = validateGeneratedFiles(sourceFiles, knowledge, testFiles);
 
   if (validation.needs_clarification) {
-    saveNodeProgress(state.pipeline_id, {
+    if (config.autonomousMode) {
+      knowledge = {
+        ...knowledge,
+        allow_new_files: true,
+        user_target_decision_made: true,
+      };
+      validation = validateGeneratedFiles(sourceFiles, knowledge, testFiles);
+      filesToWrite = validation.valid.length ? validation.valid : allFiles;
+    } else {
+      saveNodeProgress(state.pipeline_id, {
       code_write_blocked: validation.blocked,
       frontend_code: a4.frontend_code,
       backend_code: a5.backend_code,
@@ -289,10 +346,11 @@ async function devParallelNode(state) {
       filesToWrite = validation.valid;
     }
 
-    if (!filesToWrite.length) {
-      throw new Error(
-        `No files approved for write. Blocked: ${validation.blocked.map((b) => b.path).join(", ")}`,
-      );
+      if (!filesToWrite.length) {
+        throw new Error(
+          `No files approved for write. Blocked: ${validation.blocked.map((b) => b.path).join(", ")}`,
+        );
+      }
     }
   }
 
@@ -406,6 +464,24 @@ async function gate2Node(state) {
     phase: "development",
     current_agent: "GATE_2",
   });
+
+  if (config.autoApproveGates) {
+    return {
+      gate_2_approved: true,
+      gate_2_feedback: null,
+      status: "phase_2_complete",
+      current_agent: "GATE_2",
+      agent_logs: [
+        {
+          agent: "GATE_2",
+          name: "Human Gate 2",
+          status: "approved",
+          completed_at: new Date().toISOString(),
+          output_summary: "Auto-approved (AUTO_APPROVE_GATES=true)",
+        },
+      ],
+    };
+  }
 
   const decision = interrupt({
     gate: "GATE_2",

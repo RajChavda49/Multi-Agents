@@ -1,5 +1,15 @@
 import { fileExistsInRepo, normalizeRelPath, readRepoFile } from "../integrations/edit-targets.js";
 import { addLineNumbers } from "../integrations/patch-context.js";
+import { config } from "../config.js";
+import {
+  isGreenfieldTask,
+  isPatchPreferredTask,
+  suggestNewFilePaths,
+} from "./task-paths.js";
+import {
+  formatDeliverablesForPrompt,
+  parseTaskDeliverables,
+} from "./task-deliverables.js";
 
 export function isTestFilePath(relPath) {
   const p = normalizeRelPath(relPath);
@@ -36,11 +46,18 @@ export function partitionPathsByExistence(paths) {
   return { existing, newPaths };
 }
 
-/** Drop weakly-related targets when the Jira task is clearly about another area. */
-export function filterPatchTargetsByTask(paths, jiraTask) {
+/** Drop unrelated targets — never drop an area the ticket explicitly requests. */
+export function filterPatchTargetsByTask(paths, jiraTask, knowledge = {}) {
+  const parsed =
+    knowledge?.task_deliverables?.length > 0
+      ? {
+          wantsFooter: knowledge.task_deliverables.some((d) => d.id === "footer"),
+          wantsHeader: knowledge.task_deliverables.some((d) => d.id === "header"),
+        }
+      : parseTaskDeliverables(jiraTask);
+
+  const { wantsFooter, wantsHeader } = parsed;
   const text = `${jiraTask?.summary || ""} ${jiraTask?.description || ""}`.toLowerCase();
-  const wantsFooter = /\bfooter\b/.test(text);
-  const wantsHeader = /\b(header|nav|navbar)\b/.test(text) && !/\bcart header\b/.test(text);
   const isHomepage =
     /\b(home\s*page|homepage|landing|hero|ecommerce home)\b/.test(text) ||
     jiraTask?.change_type === "full_feature";
@@ -50,13 +67,13 @@ export function filterPatchTargetsByTask(paths, jiraTask) {
     if (lower.includes("footer") && !wantsFooter && isHomepage) return false;
     if (lower.includes("global-footer") && !wantsFooter) return false;
     if (lower.includes("global-header") && !wantsHeader && isHomepage) return false;
-    if (lower.includes("cart") && isHomepage) return false;
+    if (lower.includes("cart") && isHomepage && !text.includes("cart")) return false;
     return true;
   });
 }
 
 export function resolveA4WriteStrategy(knowledge, specPayload, state = {}) {
-  const feedback = `${state.retry_feedback || ""} ${state.agent_last_error || ""}`;
+  const jiraTask = knowledge?.jira_task || state.jira_task;
   const escalation = state.escalation_level || 0;
   const skipPaths = new Set([
     ...Object.keys(state.failed_patch_paths || {}),
@@ -64,60 +81,84 @@ export function resolveA4WriteStrategy(knowledge, specPayload, state = {}) {
   ]);
 
   let allPaths = listCodingTargetPaths(knowledge, specPayload);
-  if (knowledge?.jira_task || state.jira_task) {
-    allPaths = filterPatchTargetsByTask(allPaths, knowledge?.jira_task || state.jira_task);
+  if (jiraTask) {
+    allPaths = filterPatchTargetsByTask(allPaths, jiraTask, knowledge);
   }
 
   const { existing, newPaths } = partitionPathsByExistence(allPaths);
   const patchable = existing.filter((p) => !skipPaths.has(p));
+  const suggested = suggestNewFilePaths(knowledge, jiraTask);
+  const mergedNewPaths = [...new Set([...newPaths, ...suggested])].slice(0, 12);
+  const allowNew =
+    knowledge?.allow_new_files === true || (config.autonomousMode && isGreenfieldTask(knowledge, jiraTask));
+  const patchPreferred = isPatchPreferredTask(knowledge, jiraTask);
+  const greenfield = isGreenfieldTask(knowledge, jiraTask);
+  const deliverables = knowledge?.task_deliverables || parseTaskDeliverables(jiraTask).deliverables;
+  const deliverableDirective = deliverables.length
+    ? `Implement ALL deliverables (each needs file(s)):\n${formatDeliverablesForPrompt(deliverables)}`
+    : "Read Jira and implement every UI area mentioned.";
 
-  if (escalation >= 2 && patchable.length === 0 && knowledge?.allow_new_files) {
+  if (allowNew && (greenfield || deliverables.length > 1) && !patchPreferred && escalation < 1) {
+    const wirePaths = patchable.filter((p) => /pages\/|app\/.*page/i.test(p)).slice(0, 1);
     return {
-      mode: "create",
-      existing: [],
-      newPaths,
+      mode: wirePaths.length ? "hybrid" : "create",
+      existing: wirePaths,
+      newPaths: mergedNewPaths,
       allowNewFiles: true,
       escalation,
       skipPatchPaths: [...skipPaths],
-      alternateApproach:
-        "Patching existing files failed repeatedly. Build NEW components under suggested_modules and wire them in the page layout — do not retry failed paths.",
+      engineerDirective: `${deliverableDirective}\nCreate NEW component files per deliverable. Wire them in layout/page. Do not stop after the first component.`,
+      task_deliverables: deliverables,
     };
   }
 
-  if (patchable.length > 0 || escalation < 2) {
+  if (escalation >= 1 || (escalation >= 2 && patchable.length === 0)) {
     return {
-      mode: patchable.length ? "hybrid" : "create",
-      existing: patchable,
-      newPaths: knowledge?.allow_new_files ? newPaths : [],
-      allowNewFiles: knowledge?.allow_new_files === true,
+      mode: "create",
+      existing: [],
+      newPaths: mergedNewPaths,
+      allowNewFiles: allowNew,
+      escalation,
+      skipPatchPaths: [...skipPaths, ...patchable],
+      alternateApproach: `${deliverableDirective}\nPatching failed — create NEW files for each deliverable.`,
+      task_deliverables: deliverables,
+    };
+  }
+
+  if (patchable.length > 0) {
+    return {
+      mode: mergedNewPaths.length && allowNew ? "hybrid" : "patch",
+      existing: patchable.slice(0, 2),
+      newPaths: allowNew ? mergedNewPaths : [],
+      allowNewFiles: allowNew,
       escalation,
       skipPatchPaths: [...skipPaths],
     };
   }
 
-  if (knowledge?.allow_new_files) {
-    return { mode: "create", existing: [], newPaths, allowNewFiles: true, escalation };
+  if (allowNew) {
+    return { mode: "create", existing: [], newPaths: mergedNewPaths, allowNewFiles: true, escalation };
   }
 
   return { mode: "patch", existing: patchable, newPaths: [], allowNewFiles: false, escalation };
 }
 
 export function buildEscalatedFileContext(paths, options = {}) {
-  const maxChars = options.maxChars ?? 14000;
+  const maxChars = options.maxChars ?? (Number(process.env.OLLAMA_CODING_MAX_EXCERPT_CHARS) || 6000);
   return paths
     .map((relPath) => {
       const raw = readRepoFile(relPath, 0);
       if (!raw) return null;
       let numbered = addLineNumbers(raw);
       if (numbered.length > maxChars) {
-        numbered = numbered.slice(0, maxChars) + "\n/* …file truncated — use visible line numbers … */";
+        numbered = numbered.slice(0, maxChars) + "\n/* …truncated … */";
       }
       return {
         path: relPath,
         numbered_source: numbered,
         line_count: raw.split("\n").length,
         instruction:
-          'Pick ONE complete line from numbered_source as "search" (copy from "|" onward, including indentation). Change only that line in "replace".',
+          'Copy ONE complete line from numbered_source as "search" (exact characters).',
       };
     })
     .filter(Boolean);

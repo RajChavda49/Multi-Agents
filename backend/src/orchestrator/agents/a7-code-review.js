@@ -1,7 +1,11 @@
 import { chatJson } from "../llm.js";
 import { runRepoLint, isTargetRepoConfigured, getTargetRepoPath } from "../../integrations/local-repo.js";
+import {
+  summarizeGeneratedFiles,
+  summarizeSpecForReview,
+} from "../prompt-compact.js";
 
-const SYSTEM = `You are A7 Code Review Agent. Review generated code against the spec and real lint output when provided.
+const SYSTEM = `You are A7 Code Review Agent. Review generated code against the spec and real lint output.
 Respond ONLY with valid JSON:
 {
   "summary": "string",
@@ -15,25 +19,33 @@ export async function runA7CodeReview(state) {
   const startedAt = new Date().toISOString();
   const lintRun = isTargetRepoConfigured() ? runRepoLint() : null;
 
-  const user = `Review this generated codebase. Use the real lint output below when deciding approved and issues.
+  const user = `Review generated code (summaries + lint — full sources are on disk).
 
-Target repo lint (real):
+Lint:
 ${JSON.stringify(lintRun, null, 2)}
-Target repo path: ${isTargetRepoConfigured() ? getTargetRepoPath() : "not connected"}
+Repo: ${isTargetRepoConfigured() ? getTargetRepoPath() : "not connected"}
 
-Technical spec:
-${JSON.stringify(state.technical_spec, null, 2)}
+Spec:
+${JSON.stringify(summarizeSpecForReview(state.technical_spec), null, 2)}
 
-Frontend:
-${JSON.stringify(state.frontend_code, null, 2)}
+Frontend files:
+${JSON.stringify(summarizeGeneratedFiles(state.frontend_code), null, 2)}
 
-Backend:
-${JSON.stringify(state.backend_code, null, 2)}
+Backend files:
+${JSON.stringify(summarizeGeneratedFiles(state.backend_code), null, 2)}
 
-Tests:
-${JSON.stringify(state.test_code, null, 2)}`;
+Test files:
+${JSON.stringify(summarizeGeneratedFiles(state.test_code), null, 2)}
 
-  const review = await chatJson(SYSTEM, user, { agent: "A7", pipeline_id: state.pipeline_id });
+Approve if implementation matches spec and no high-severity lint issues.`;
+
+  const review = await chatJson(SYSTEM, user, {
+    agent: "A7",
+    pipeline_id: state.pipeline_id,
+    planning: true,
+    num_predict: 600,
+    num_ctx: 4096,
+  });
 
   return {
     code_review: review,

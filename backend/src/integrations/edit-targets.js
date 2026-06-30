@@ -1,3 +1,6 @@
+import { config } from "../config.js";
+import { suggestNewFilePaths, isGreenfieldTask } from "../orchestrator/task-paths.js";
+import { deliverablePaths } from "../orchestrator/task-deliverables.js";
 import fs from "fs";
 import path from "path";
 import { getTargetRepoPath } from "./local-repo.js";
@@ -431,6 +434,32 @@ export function assessEditTargetConfidence(knowledge, jiraTask) {
 
   const needs_clarification = Boolean(clarification_mode);
 
+  if (config.autonomousMode && clarification_mode) {
+    if (isGreenfield && (clarification_mode === "no_files_matched" || clarification_mode === "weak_match")) {
+      return {
+        confidence: "medium",
+        needs_clarification: false,
+        edit_targets: primary.length ? primary : existing.slice(0, 4),
+        clarification_issues: [],
+        clarification_mode: null,
+        allow_new_files: true,
+        requires_create_decision: false,
+        autonomous_decision: "create_new_files",
+      };
+    }
+    if (clarification_mode === "weak_match" && existing.length > 0) {
+      return {
+        confidence: "medium",
+        needs_clarification: false,
+        edit_targets: existing.slice(0, 4),
+        clarification_issues: [],
+        clarification_mode: null,
+        allow_new_files: true,
+        autonomous_decision: "patch_or_create",
+      };
+    }
+  }
+
   let confidence = "high";
   if (primary.length === 0) confidence = existing.length ? "medium" : "none";
   else if (needs_clarification || primary.length > 3) confidence = "low";
@@ -447,6 +476,10 @@ export function assessEditTargetConfidence(knowledge, jiraTask) {
 
 export function enrichKnowledgeContext(knowledge, jiraTask) {
   const assessment = assessEditTargetConfidence(knowledge, jiraTask);
+  const suggested = suggestNewFilePaths({ ...knowledge, ...assessment }, jiraTask);
+  const fromDeliverables = deliverablePaths(assessment.task_deliverables || knowledge.task_deliverables || []);
+  const greenfield = isGreenfieldTask(knowledge, jiraTask);
+
   return {
     ...knowledge,
     edit_targets: assessment.edit_targets,
@@ -455,7 +488,19 @@ export function enrichKnowledgeContext(knowledge, jiraTask) {
     clarification_issues: assessment.clarification_issues,
     clarification_mode: assessment.clarification_mode,
     requires_create_decision: assessment.requires_create_decision === true,
-    allow_new_files: knowledge.allow_new_files === true || assessment.allow_new_files === true,
+    allow_new_files:
+      knowledge.allow_new_files === true ||
+      assessment.allow_new_files === true ||
+      (config.autonomousMode && greenfield),
+    suggested_new_file_paths: [
+      ...new Set([
+        ...(knowledge.suggested_new_file_paths || []),
+        ...suggested,
+        ...fromDeliverables,
+      ]),
+    ].slice(0, 12),
+    task_deliverables: knowledge.task_deliverables || assessment.task_deliverables,
+    autonomous_decision: assessment.autonomous_decision || null,
   };
 }
 

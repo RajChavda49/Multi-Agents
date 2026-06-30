@@ -27,6 +27,11 @@ export function formatJiraImagesCompact(images = []) {
   return summaries.length ? `Images: ${summaries.join(" | ")}` : "";
 }
 
+/** Single-line JSON — smaller prompts, slightly faster inference. */
+export function compactJson(obj) {
+  return JSON.stringify(obj);
+}
+
 export function formatJiraContext(task) {
   return {
     text: formatJiraBlock(task),
@@ -93,7 +98,7 @@ export function formatRepoScanForLlm(repoContext) {
   const order = { content: 0, intent: 1, keyword: 2 };
   const ordered = [...(repoContext.matched_files || [])]
     .sort((a, b) => (order[a.match_type] ?? 3) - (order[b.match_type] ?? 3))
-    .slice(0, 6);
+    .slice(0, 4);
 
   const files = ordered.map((f) => ({
     path: f.path,
@@ -147,6 +152,10 @@ export function formatKnowledgeForA2(knowledge) {
     backend_reason: knowledge.backend_reason,
     stack: knowledge.stack,
     target_confidence: knowledge.target_confidence,
+    task_deliverables: (knowledge.task_deliverables || []).map((d) => ({
+      id: d.id,
+      label: d.label,
+    })),
     files_to_edit: editBlock.files_to_change,
     allow_new_files: knowledge.allow_new_files === true,
     edit_rule: editBlock.rule,

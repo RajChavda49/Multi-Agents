@@ -6,7 +6,9 @@ function errorSignature(err) {
   const path = err?.patchFailure?.path || msg.match(/in ([^\s—]+)/)?.[1];
   const kind = msg.includes("search block not found")
     ? "search_not_found"
-    : msg.includes("truncate")
+    : msg.includes("invalid JSON") || msg.includes("truncated")
+      ? "invalid_json"
+      : msg.includes("truncate")
       ? "truncate"
       : msg.includes("not found in repo")
         ? "missing_file"
@@ -24,7 +26,10 @@ export function buildAgentRetryFeedback(err, agentId, attempt, meta = {}) {
 
   if (repeat && escalation >= 2) {
     hint =
-      "STOP repeating the same patch approach. Use a DIFFERENT strategy: skip the failing path, create NEW component files under suggested_modules, and wire them in the page. If you must patch, copy ONE line exactly from numbered_source in the prompt.";
+      "Switch to CREATE mode: new component files + wire in page. Do not patch failed paths.";
+  } else if (config.autonomousMode && /search block not found/i.test(msg)) {
+    hint =
+      "Patch failed — create NEW files instead of re-patching. Use suggested_new_file_paths.";
   } else if (pf) {
     hint = `${pf.recovery_hint}${
       pf.verbatim_anchors?.length
@@ -46,8 +51,12 @@ export function buildAgentRetryFeedback(err, agentId, attempt, meta = {}) {
       escalation >= 1
         ? "Use numbered_source in the prompt — copy ONE full line character-for-character as search."
         : "Copy search from verbatim_anchors or a single complete line from the excerpt.";
-  } else if (/invalid JSON/i.test(msg)) {
-    hint = "Return valid JSON only — no markdown fences.";
+  } else if (/invalid JSON|truncated|malformed JSON/i.test(msg)) {
+    hint =
+      "JSON was truncated. Output ONE deliverable per files[] entry. Keep code compact — no markdown fences.";
+  } else if (/incomplete: missing deliverable/i.test(msg)) {
+    hint =
+      "Missing deliverable — add a files[] entry for each item in deliverables_checklist. One component per deliverable.";
   }
 
   const escalationNote =
@@ -99,8 +108,10 @@ export async function runAgentWithRetry(agentId, pipelineId, runFn, initialState
       // First failure → next attempt escalates (numbered source). Second+ → skip path / alternate mode.
       escalationLevel = Math.max(escalationLevel, failCount);
 
-      if (failCount >= 2 && err.patchFailure?.path) {
-        skipPatchPaths.add(err.patchFailure.path);
+      if (err.patchFailure?.path) {
+        if (failCount >= 2 || (config.autonomousMode && failCount >= 1 && sig.startsWith("search_not_found"))) {
+          skipPatchPaths.add(err.patchFailure.path);
+        }
       }
 
       if (err.patchFailure) {

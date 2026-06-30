@@ -508,10 +508,11 @@ export function gatherKnowledgeContext(jiraTask, retryFeedback = "", intent = nu
 
   const mergedMatches = [...contentMatches, ...intentAdds, ...keywordAdds].slice(0, 8);
   const keyFileContents = {};
-
   for (const name of KEY_FILES) {
-    const content = readFileSafe(name, 4000);
-    if (content) keyFileContents[name] = content;
+    const full = path.join(repoPath, name);
+    if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+      keyFileContents[name] = true;
+    }
   }
 
   const moduleDirs = dirsFromMatches(mergedMatches, intent);

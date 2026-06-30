@@ -26,17 +26,38 @@ export function preparePipelineForAutoRetry(pipeline, err, phase = "planning") {
   const graph_thread_id =
     phase === "development"
       ? `${pipeline.id}::ar${auto_retry_count}`
-      : pipeline.graph_thread_id;
+      : `${pipeline.id}::pr${auto_retry_count}`;
 
-  return {
+  const base = {
     ...pipeline,
     auto_retry_count,
     retry_feedback,
     graph_thread_id,
     error: null,
     failure: null,
-    status: pipeline.gate_1_approved ? "phase_2_running" : "phase_1_running",
+    current_agent: phase === "planning" ? "A1" : pipeline.current_agent,
     updated_at: new Date().toISOString(),
+  };
+
+  if (phase === "planning") {
+    return {
+      ...base,
+      phase: "planning",
+      status: "phase_1_running",
+      knowledge_context: null,
+      technical_spec: null,
+      test_cases: [],
+      test_suite_name: null,
+      gate_1_approved: null,
+      gate_1_feedback: null,
+    };
+  }
+
+  return {
+    ...base,
+    gate_1_approved: true,
+    phase: "development",
+    status: "phase_2_running",
   };
 }
 
